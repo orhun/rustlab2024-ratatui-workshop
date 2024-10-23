@@ -21,7 +21,7 @@ pub struct App {
     pub room_list: RoomList,
     pub text_area: TextArea<'static>,
     pub file_explorer: FileExplorer,
-    pub popup: Popup,
+    pub popup: Option<Popup>,
 }
 
 #[derive(Clone)]
@@ -65,7 +65,7 @@ impl App {
             room_list,
             text_area,
             file_explorer,
-            popup: Popup::None,
+            popup: None,
         })
     }
 
@@ -80,23 +80,23 @@ impl App {
                 let event = raw_event.clone().into();
                 // Handle popup
                 match self.popup {
-                    Popup::FileExplorer => {
+                    Some(Popup::FileExplorer) => {
                         if let Input { key: Key::Esc, .. } = event {
-                            self.popup = Popup::None;
+                            self.popup = None;
                         } else if let Input {
                             key: Key::Enter, ..
                         } = event
                         {
-                            self.popup = Popup::None;
+                            self.popup = None;
                             event_sender.send(Event::FileSelected)?;
                         } else {
                             self.file_explorer.handle(&raw_event)?;
                         }
                         return Ok(());
                     }
-                    Popup::ImagePreview(_) => {
+                    Some(Popup::ImagePreview(_)) => {
                         if let Input { key: Key::Esc, .. } = event {
-                            self.popup = Popup::None;
+                            self.popup = None;
                         }
                         return Ok(());
                     }
@@ -133,7 +133,7 @@ impl App {
                         ctrl: true,
                         ..
                     } => {
-                        self.popup = Popup::FileExplorer;
+                        self.popup = Some(Popup::FileExplorer);
                     }
                     // Preview file
                     Input {
@@ -152,7 +152,7 @@ impl App {
                             let mut picker = Picker::new(user_fontsize);
                             picker.protocol_type = user_protocol;
                             let image = picker.new_resize_protocol(img);
-                            self.popup = Popup::ImagePreview(image);
+                            self.popup = Some(Popup::ImagePreview(image));
                         }
                     }
                     // Other key presses

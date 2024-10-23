@@ -28,11 +28,11 @@ impl App {
         frame.render_widget(&mut self.message_list, message_area);
         frame.render_widget(&mut self.room_list, room_area);
 
-        if self.popup == Popup::FileExplorer {
+        if let Some(Popup::FileExplorer) = self.popup {
             let popup_area = Popup::area(frame.area(), 50, 50);
             frame.render_widget(Clear, popup_area);
             frame.render_widget(&self.file_explorer.widget(), popup_area);
-        } else if let Popup::ImagePreview(protocol) = &mut self.popup {
+        } else if let Some(Popup::ImagePreview(protocol)) = &mut self.popup {
             let popup_area = Popup::area(frame.area(), 80, 80);
             frame.render_widget(Clear, popup_area);
             let image = StatefulImage::new(None);
