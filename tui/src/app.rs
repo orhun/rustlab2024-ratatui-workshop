@@ -5,16 +5,19 @@ use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use common::{RoomEvent, ServerCommand, ServerEvent};
 use crossterm::event::Event as CrosstermEvent;
-use futures::SinkExt;
-use ratatui::style::{Color, Modifier, Style};
+use futures::{SinkExt, StreamExt};
 use ratatui::widgets::{Block, BorderType};
+use ratatui::{
+    style::{Color, Modifier, Style},
+    DefaultTerminal,
+};
 use ratatui_explorer::{File, FileExplorer, Theme};
 use ratatui_image::picker::{Picker, ProtocolType};
 use tokio::{
-    net::tcp::WriteHalf,
+    net::{tcp::WriteHalf, TcpStream},
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
 };
-use tokio_util::codec::{FramedWrite, LinesCodec};
+use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 use tui_textarea::{Input, Key, TextArea};
 
 use crate::message_list::MessageList;
@@ -49,6 +52,33 @@ impl App {
             event_sender,
             event_receiver,
         }
+    }
+
+    pub async fn run(
+        mut self,
+        mut terminal: DefaultTerminal,
+        mut connection: TcpStream,
+    ) -> anyhow::Result<()> {
+        let (reader, writer) = connection.split();
+        let mut tcp_writer = FramedWrite::new(writer, LinesCodec::new());
+        let mut tcp_reader = FramedRead::new(reader, LinesCodec::new());
+        let mut term_stream = crossterm::event::EventStream::new();
+        while self.is_running {
+            terminal.draw(|f| self.draw_ui(f))?;
+            tokio::select! {
+                Some(event) = term_stream.next() => {
+                    let event = Event::Terminal(event?);
+                    self.handle_event(event, &mut tcp_writer).await?;
+                },
+                Some(event) = self.event_receiver.recv() => {
+                    self.handle_event(event, &mut tcp_writer).await?;
+                }
+                Some(tcp_event) = tcp_reader.next() => {
+                    self.handle_tcp_event(tcp_event?, &mut tcp_writer).await?;
+                },
+            }
+        }
+        Ok(())
     }
 
     pub async fn handle_event(
