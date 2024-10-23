@@ -7,7 +7,7 @@ use crossterm::event::Event as CrosstermEvent;
 use futures::SinkExt;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, BorderType};
-use ratatui_explorer::{FileExplorer, Theme};
+use ratatui_explorer::{File, FileExplorer, Theme};
 use ratatui_image::picker::{Picker, ProtocolType};
 use tokio::{
     net::tcp::WriteHalf,
@@ -34,7 +34,7 @@ pub struct App {
 #[derive(Clone)]
 pub enum Event {
     Terminal(CrosstermEvent),
-    FileSelected,
+    FileSelected(File),
 }
 
 impl App {
@@ -59,18 +59,19 @@ impl App {
     ) -> anyhow::Result<()> {
         match event {
             Event::Terminal(raw_event) => {
-                let event = raw_event.clone().into();
+                let input = Input::from(raw_event.clone());
                 // Handle popup
                 match self.popup {
                     Some(Popup::FileExplorer) => {
-                        if let Input { key: Key::Esc, .. } = event {
+                        if let Input { key: Key::Esc, .. } = input {
                             self.popup = None;
                         } else if let Input {
                             key: Key::Enter, ..
-                        } = event
+                        } = input
                         {
                             self.popup = None;
-                            self.event_sender.send(Event::FileSelected)?;
+                            let file = self.file_explorer.as_ref().unwrap().current();
+                            self.event_sender.send(Event::FileSelected(file.clone()))?;
                         } else {
                             let explorer = self.file_explorer.as_mut().unwrap();
                             explorer.handle(&raw_event)?;
@@ -78,7 +79,7 @@ impl App {
                         return Ok(());
                     }
                     Some(Popup::ImagePreview(_)) => {
-                        if let Input { key: Key::Esc, .. } = event {
+                        if let Input { key: Key::Esc, .. } = input {
                             self.popup = None;
                         }
                         return Ok(());
@@ -87,7 +88,7 @@ impl App {
                 }
 
                 // Handle key input
-                match event {
+                match input {
                     // Esc
                     Input { key: Key::Esc, .. } => self.is_running = false,
                     // Enter
@@ -148,9 +149,7 @@ impl App {
                 }
             }
             // Send file to server
-            Event::FileSelected => {
-                let explorer = self.file_explorer.as_ref().unwrap();
-                let file = explorer.current();
+            Event::FileSelected(file) => {
                 if file.is_dir() {
                     return Ok(());
                 }
