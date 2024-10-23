@@ -43,6 +43,12 @@ pub enum Event {
     FileSelected(File),
 }
 
+impl From<CrosstermEvent> for Event {
+    fn from(event: CrosstermEvent) -> Self {
+        Event::Terminal(event)
+    }
+}
+
 impl App {
     pub fn new(addr: SocketAddr) -> Self {
         let (event_sender, event_receiver) = unbounded_channel();
@@ -72,19 +78,14 @@ impl App {
         while self.is_running {
             terminal.draw(|frame| self.draw_ui(frame))?;
             tokio::select! {
-                Some(event) = self.term_stream.next() => {
-                    let event = Event::Terminal(event?);
-                    self.handle_event(event).await?;
+                Some(crossterm_event) = self.term_stream.next() => {
+                    let crossterm_event = crossterm_event?;
+                    self.handle_event(Event::from(crossterm_event)).await?;
                 },
-                Some(event) = self.event_receiver.recv() => {
-                    self.handle_event(event).await?;
-                }
-                Some(tcp_event) = tcp_reader.next() => {
-                    self.handle_tcp_event(tcp_event?).await?;
-                },
+                Some(event) = self.event_receiver.recv() => self.handle_event(event).await?,
+                Some(tcp_event) = tcp_reader.next() => self.handle_tcp_event(tcp_event?).await?,
             }
         }
-
         Ok(())
     }
 
