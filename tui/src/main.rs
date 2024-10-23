@@ -19,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
     let mut tcp_writer = FramedWrite::new(writer, LinesCodec::new());
     let mut tcp_reader = FramedRead::new(reader, LinesCodec::new());
 
-    let mut app = App::new()?;
+    let mut app = App::new();
     let mut terminal = ratatui::init();
     let mut term_stream = crossterm::event::EventStream::new();
 

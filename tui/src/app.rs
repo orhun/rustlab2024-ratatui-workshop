@@ -1,3 +1,5 @@
+use std::io;
+
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use common::{RoomEvent, ServerCommand, ServerEvent};
@@ -23,7 +25,7 @@ pub struct App {
     pub message_list: MessageList,
     pub room_list: RoomList,
     pub text_area: TextArea<'static>,
-    pub file_explorer: FileExplorer,
+    pub file_explorer: Option<FileExplorer>,
     pub popup: Option<Popup>,
     pub event_sender: UnboundedSender<Event>,
     pub event_receiver: UnboundedReceiver<Event>,
@@ -36,7 +38,7 @@ pub enum Event {
 }
 
 impl App {
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new() -> Self {
         // Message list.
         let message_list = MessageList::default();
 
@@ -48,32 +50,17 @@ impl App {
         text_area.set_cursor_line_style(Style::default());
         text_area.set_placeholder_text("Start typing...");
 
-        // Create a file explorer
-        let file_explorer = FileExplorer::with_theme(
-            Theme::default()
-                .add_default_title()
-                .with_title_bottom(|fe| format!("[ {} files ]", fe.files().len()).into())
-                .with_style(Style::default().fg(Color::Yellow))
-                .with_highlight_item_style(Style::default().add_modifier(Modifier::BOLD))
-                .with_highlight_dir_style(
-                    Style::default()
-                        .fg(Color::Blue)
-                        .add_modifier(Modifier::BOLD),
-                )
-                .with_highlight_symbol("> ")
-                .with_block(Block::bordered().border_type(BorderType::Rounded)),
-        )?;
         let (event_sender, event_receiver) = unbounded_channel();
-        Ok(Self {
+        Self {
             is_running: true,
             message_list,
             room_list,
             text_area,
-            file_explorer,
+            file_explorer: None,
             popup: None,
             event_sender,
             event_receiver,
-        })
+        }
     }
 
     pub async fn handle_event(
@@ -96,7 +83,8 @@ impl App {
                             self.popup = None;
                             self.event_sender.send(Event::FileSelected)?;
                         } else {
-                            self.file_explorer.handle(&raw_event)?;
+                            let explorer = self.file_explorer.as_mut().unwrap();
+                            explorer.handle(&raw_event)?;
                         }
                         return Ok(());
                     }
@@ -139,6 +127,9 @@ impl App {
                         ctrl: true,
                         ..
                     } => {
+                        let file_explorer = create_file_explorer()?;
+                        // todo store in Popup
+                        self.file_explorer = Some(file_explorer);
                         self.popup = Some(Popup::FileExplorer);
                     }
                     // Preview file
@@ -169,7 +160,8 @@ impl App {
             }
             // Send file to server
             Event::FileSelected => {
-                let file = self.file_explorer.current();
+                let explorer = self.file_explorer.as_ref().unwrap();
+                let file = explorer.current();
                 if file.is_dir() {
                     return Ok(());
                 }
@@ -220,4 +212,21 @@ impl App {
         }
         Ok(())
     }
+}
+
+fn create_file_explorer() -> io::Result<FileExplorer> {
+    FileExplorer::with_theme(
+        Theme::default()
+            .add_default_title()
+            .with_title_bottom(|fe| format!("[ {} files ]", fe.files().len()).into())
+            .with_style(Style::default().fg(Color::Yellow))
+            .with_highlight_item_style(Style::default().add_modifier(Modifier::BOLD))
+            .with_highlight_dir_style(
+                Style::default()
+                    .fg(Color::Blue)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .with_highlight_symbol("> ")
+            .with_block(Block::bordered().border_type(BorderType::Rounded)),
+    )
 }
