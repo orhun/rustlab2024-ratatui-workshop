@@ -79,7 +79,7 @@ impl App {
                     self.handle_event(Event::from(crossterm_event)).await?;
                 },
                 Some(event) = self.event_receiver.recv() => self.handle_event(event).await?,
-                Some(tcp_event) = tcp_reader.next() => self.handle_tcp_event(tcp_event?).await?,
+                Some(tcp_event) = tcp_reader.next() => self.handle_server_event(tcp_event?).await?,
             }
         }
         Ok(())
@@ -159,36 +159,37 @@ impl App {
         Ok(())
     }
 
-    pub async fn handle_tcp_event(&mut self, event: String) -> anyhow::Result<()> {
+    pub async fn handle_server_event(&mut self, event: String) -> anyhow::Result<()> {
         let event = ServerEvent::from_json_str(&event)?;
         self.message_list.events.push(event.clone());
         match event {
-            ServerEvent::Help(username, _help) => {
-                self.message_list.username = username;
+            ServerEvent::Help(username, _help) => self.message_list.username = username,
+            ServerEvent::RoomEvent(username, room_event) => {
+                self.handle_room_event(username, room_event).await
             }
-            ServerEvent::RoomEvent(_username, RoomEvent::Message(_message)) => {}
-            ServerEvent::RoomEvent(_username, RoomEvent::Joined(room))
-            | ServerEvent::RoomEvent(_username, RoomEvent::Left(room)) => {
+            ServerEvent::Error(_error) => {}
+            ServerEvent::Rooms(rooms) => self.room_list.rooms = rooms,
+            ServerEvent::Users(users) => self.room_list.users = users,
+        }
+        Ok(())
+    }
+
+    async fn handle_room_event(&mut self, username: String, room_event: RoomEvent) {
+        match room_event {
+            RoomEvent::Message(_message) => {}
+            RoomEvent::Joined(room) | RoomEvent::Left(room) => {
                 self.message_list.room = room.clone();
                 self.room_list.room = room;
                 self.send(ServerCommand::Users).await;
                 self.send(ServerCommand::Rooms).await;
             }
-            ServerEvent::RoomEvent(username, RoomEvent::NameChange(new_username)) => {
+            RoomEvent::NameChange(new_username) => {
                 if username == self.message_list.username {
                     self.message_list.username = new_username;
                 }
             }
-            ServerEvent::RoomEvent(_username, RoomEvent::File(_name, _contents)) => {}
-            ServerEvent::Error(_error) => {}
-            ServerEvent::Rooms(rooms) => {
-                self.room_list.rooms = rooms;
-            }
-            ServerEvent::Users(users) => {
-                self.room_list.users = users;
-            }
+            RoomEvent::File(_name, _contents) => {}
         }
-        Ok(())
     }
 }
 
