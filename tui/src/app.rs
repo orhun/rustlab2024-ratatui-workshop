@@ -58,30 +58,9 @@ impl App {
         match event {
             Event::Terminal(raw_event) => {
                 let input = Input::from(raw_event.clone());
-                // Handle popup
-                match self.popup {
-                    Some(Popup::FileExplorer(ref mut explorer)) => {
-                        match input {
-                            Input { key: Key::Esc, .. } => self.popup = None,
-
-                            Input {
-                                key: Key::Enter, ..
-                            } => {
-                                let event = Event::FileSelected(explorer.current().clone());
-                                self.event_sender.send(event)?;
-                                self.popup = None;
-                            }
-                            _ => explorer.handle(&raw_event)?,
-                        }
-                        return Ok(());
-                    }
-                    Some(Popup::ImagePreview(_)) => {
-                        if matches!(input, Input { key: Key::Esc, .. }) {
-                            self.popup = None;
-                        }
-                        return Ok(());
-                    }
-                    _ => {}
+                if self.popup.is_some() {
+                    self.handle_popup_input(input, raw_event).await?;
+                    return Ok(());
                 }
 
                 // Handle key input
@@ -192,6 +171,32 @@ impl App {
             ServerEvent::Users(users) => {
                 self.room_list.users = users;
             }
+        }
+        Ok(())
+    }
+
+    async fn handle_popup_input(
+        &mut self,
+        input: Input,
+        raw_event: CrosstermEvent,
+    ) -> anyhow::Result<()> {
+        match self.popup {
+            Some(Popup::FileExplorer(ref mut explorer)) => match input.key {
+                Key::Esc => self.popup = None,
+                Key::Enter => {
+                    let event = Event::FileSelected(explorer.current().clone());
+                    let _ = self.event_sender.send(event);
+                    self.popup = None;
+                }
+                _ => explorer.handle(&raw_event)?,
+            },
+            Some(Popup::ImagePreview(_)) => match input.key {
+                Key::Esc => {
+                    self.popup = None;
+                }
+                _ => {}
+            },
+            None => {}
         }
         Ok(())
     }
