@@ -1,10 +1,13 @@
 use std::fmt;
 
+use crate::{RoomName, Username};
+
 pub enum ServerCommand {
     Help,
-    Name(String),
+    /// Set the client's username
+    Name(Username),
     Rooms,
-    Join(String),
+    Join(RoomName),
     Users,
     File(String, String),
     Quit,
@@ -31,12 +34,12 @@ impl TryFrom<String> for ServerCommand {
         match parts.next() {
             Some("/help") => Ok(ServerCommand::Help),
             Some("/name") => {
-                let name = parts.next().ok_or("Name is required")?.to_string();
+                let name = parts.next().ok_or("Name is required")?.into();
                 Ok(ServerCommand::Name(name))
             }
             Some("/rooms") => Ok(ServerCommand::Rooms),
             Some("/join") => {
-                let room = parts.next().ok_or("Room name is required")?.to_string();
+                let room = parts.next().ok_or("Room name is required")?.into();
                 Ok(ServerCommand::Join(room))
             }
             Some("/users") => Ok(ServerCommand::Users),
