@@ -7,7 +7,6 @@ use crossterm::event::{Event as CrosstermEvent, EventStream};
 use futures::{SinkExt, StreamExt};
 use ratatui::{style::Style, DefaultTerminal};
 use ratatui_explorer::File;
-use ratatui_image::picker::{Picker, ProtocolType};
 use tokio::{
     net::{tcp::OwnedWriteHalf, TcpStream},
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
@@ -37,6 +36,7 @@ pub struct App {
 pub enum Event {
     Terminal(CrosstermEvent),
     FileSelected(File),
+    PopupClosed,
 }
 
 impl From<CrosstermEvent> for Event {
@@ -94,18 +94,22 @@ impl App {
         match event {
             Event::Terminal(raw_event) => {
                 let input = Input::from(raw_event.clone());
-                if self.popup.is_some() {
-                    self.handle_popup_input(input, raw_event).await?;
+                if let Some(ref mut popup) = self.popup {
+                    popup.handle_input(input, raw_event).await?;
                     return Ok(());
                 }
                 self.handle_key_input(input).await?;
             }
             // Send file to server
             Event::FileSelected(file) => {
+                self.popup = None;
                 let contents = tokio::fs::read(file.path()).await?;
                 let base64 = BASE64_STANDARD.encode(contents);
                 let command = ServerCommand::File(file.name().to_string(), base64);
                 self.send(command).await;
+            }
+            Event::PopupClosed => {
+                self.popup = None;
             }
         }
 
@@ -140,37 +144,31 @@ impl App {
     }
 
     fn show_file_explorer(&mut self) -> Result<(), anyhow::Error> {
-        let popup = Popup::file_explorer()?;
+        let popup = Popup::file_explorer(self.event_sender.clone())?;
         self.popup = Some(popup);
         Ok(())
     }
 
     fn preview_file(&mut self) -> Result<(), anyhow::Error> {
         let selected_event = self.message_list.selected_event();
+        let event_sender = self.event_sender.clone();
         if let Some(ServerEvent::RoomEvent(_, RoomEvent::File(_, contents))) = selected_event {
-            let data = BASE64_STANDARD.decode(contents.as_bytes())?;
-            let img = image::load_from_memory(&data)?;
-            let user_fontsize = (7, 14);
-            let user_protocol = ProtocolType::Halfblocks;
-            let mut picker = Picker::new(user_fontsize);
-            picker.protocol_type = user_protocol;
-            let image = picker.new_resize_protocol(img);
-            self.popup = Some(Popup::ImagePreview(image));
+            let image_preview = Popup::image_preview(contents, event_sender)?;
+            self.popup = Some(image_preview);
         }
         Ok(())
     }
 
-    #[allow(unused_variables)]
     pub async fn handle_tcp_event(&mut self, event: String) -> anyhow::Result<()> {
         let event = ServerEvent::from_json_str(&event)?;
         self.message_list.events.push(event.clone());
         match event {
-            ServerEvent::Help(username, help) => {
+            ServerEvent::Help(username, _help) => {
                 self.message_list.username = username;
             }
-            ServerEvent::RoomEvent(username, RoomEvent::Message(message)) => {}
-            ServerEvent::RoomEvent(username, RoomEvent::Joined(room))
-            | ServerEvent::RoomEvent(username, RoomEvent::Left(room)) => {
+            ServerEvent::RoomEvent(_username, RoomEvent::Message(_message)) => {}
+            ServerEvent::RoomEvent(_username, RoomEvent::Joined(room))
+            | ServerEvent::RoomEvent(_username, RoomEvent::Left(room)) => {
                 self.message_list.room = room.clone();
                 self.room_list.room = room;
                 self.send(ServerCommand::Users).await;
@@ -181,41 +179,14 @@ impl App {
                     self.message_list.username = new_username;
                 }
             }
-            ServerEvent::RoomEvent(username, RoomEvent::File(name, contents)) => {}
-            ServerEvent::Error(error) => {}
+            ServerEvent::RoomEvent(_username, RoomEvent::File(_name, _contents)) => {}
+            ServerEvent::Error(_error) => {}
             ServerEvent::Rooms(rooms) => {
                 self.room_list.rooms = rooms;
             }
             ServerEvent::Users(users) => {
                 self.room_list.users = users;
             }
-        }
-        Ok(())
-    }
-
-    async fn handle_popup_input(
-        &mut self,
-        input: Input,
-        raw_event: CrosstermEvent,
-    ) -> anyhow::Result<()> {
-        match self.popup {
-            Some(Popup::FileExplorer(ref mut explorer)) => match input.key {
-                Key::Esc => self.popup = None,
-                Key::Enter => {
-                    let file = explorer.current().clone();
-                    if file.is_dir() {
-                        return Ok(());
-                    }
-                    let event = Event::FileSelected(file);
-                    let _ = self.event_sender.send(event);
-                    self.popup = None;
-                }
-                _ => explorer.handle(&raw_event)?,
-            },
-            Some(Popup::ImagePreview(_)) if input.key == Key::Esc => {
-                self.popup = None;
-            }
-            _ => {}
         }
         Ok(())
     }
