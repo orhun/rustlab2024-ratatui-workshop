@@ -19,8 +19,6 @@ async fn main() -> anyhow::Result<()> {
     let mut tcp_writer = FramedWrite::new(writer, LinesCodec::new());
     let mut tcp_reader = FramedRead::new(reader, LinesCodec::new());
 
-    let (mut event_sender, mut event_reader) = tokio::sync::mpsc::unbounded_channel::<Event>();
-
     let mut app = App::new()?;
     let mut terminal = ratatui::init();
     let mut term_stream = crossterm::event::EventStream::new();
@@ -30,10 +28,10 @@ async fn main() -> anyhow::Result<()> {
         tokio::select! {
             Some(event) = term_stream.next() => {
                 let event = Event::Terminal(event?);
-                app.handle_event(event, &mut tcp_writer, &mut event_sender).await?;
+                app.handle_event(event, &mut tcp_writer).await?;
             },
-            Some(event) = event_reader.recv() => {
-                app.handle_event(event, &mut tcp_writer, &mut event_sender).await?;
+            Some(event) = app.event_receiver.recv() => {
+                app.handle_event(event, &mut tcp_writer).await?;
             }
             Some(tcp_event) = tcp_reader.next() => {
                 app.handle_tcp_event(tcp_event?, &mut tcp_writer).await?;

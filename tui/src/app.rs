@@ -7,7 +7,10 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, BorderType};
 use ratatui_explorer::{FileExplorer, Theme};
 use ratatui_image::picker::{Picker, ProtocolType};
-use tokio::net::tcp::WriteHalf;
+use tokio::{
+    net::tcp::WriteHalf,
+    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+};
 use tokio_util::codec::{FramedWrite, LinesCodec};
 use tui_textarea::{Input, Key, TextArea};
 
@@ -22,6 +25,8 @@ pub struct App {
     pub text_area: TextArea<'static>,
     pub file_explorer: FileExplorer,
     pub popup: Option<Popup>,
+    pub event_sender: UnboundedSender<Event>,
+    pub event_receiver: UnboundedReceiver<Event>,
 }
 
 #[derive(Clone)]
@@ -58,7 +63,7 @@ impl App {
                 .with_highlight_symbol("> ")
                 .with_block(Block::bordered().border_type(BorderType::Rounded)),
         )?;
-
+        let (event_sender, event_receiver) = unbounded_channel();
         Ok(Self {
             is_running: true,
             message_list,
@@ -66,6 +71,8 @@ impl App {
             text_area,
             file_explorer,
             popup: None,
+            event_sender,
+            event_receiver,
         })
     }
 
@@ -73,7 +80,6 @@ impl App {
         &mut self,
         event: Event,
         tcp_writer: &mut FramedWrite<WriteHalf<'_>, LinesCodec>,
-        event_sender: &mut tokio::sync::mpsc::UnboundedSender<Event>,
     ) -> anyhow::Result<()> {
         match event {
             Event::Terminal(raw_event) => {
@@ -88,7 +94,7 @@ impl App {
                         } = event
                         {
                             self.popup = None;
-                            event_sender.send(Event::FileSelected)?;
+                            self.event_sender.send(Event::FileSelected)?;
                         } else {
                             self.file_explorer.handle(&raw_event)?;
                         }
