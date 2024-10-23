@@ -14,7 +14,7 @@ use ratatui::{
 use ratatui_explorer::{File, FileExplorer, Theme};
 use ratatui_image::picker::{Picker, ProtocolType};
 use tokio::{
-    net::{tcp::WriteHalf, TcpStream},
+    net::{tcp::OwnedWriteHalf, TcpStream},
     sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
 };
 use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
@@ -26,6 +26,7 @@ use crate::room_list::RoomList;
 
 pub struct App {
     pub addr: SocketAddr,
+    pub term_stream: crossterm::event::EventStream,
     pub is_running: bool,
     pub message_list: MessageList,
     pub room_list: RoomList,
@@ -33,6 +34,7 @@ pub struct App {
     pub popup: Option<Popup>,
     pub event_sender: UnboundedSender<Event>,
     pub event_receiver: UnboundedReceiver<Event>,
+    pub tcp_writer: Option<FramedWrite<OwnedWriteHalf, LinesCodec>>,
 }
 
 #[derive(Clone)]
@@ -44,8 +46,10 @@ pub enum Event {
 impl App {
     pub fn new(addr: SocketAddr) -> Self {
         let (event_sender, event_receiver) = unbounded_channel();
+        let term_stream = crossterm::event::EventStream::new();
         Self {
             addr,
+            term_stream,
             is_running: false,
             message_list: MessageList::default(),
             room_list: RoomList::default(),
@@ -53,40 +57,43 @@ impl App {
             popup: None,
             event_sender,
             event_receiver,
+            tcp_writer: None,
         }
     }
 
     pub async fn run(mut self, mut terminal: DefaultTerminal) -> anyhow::Result<()> {
         self.is_running = true;
-        let mut connection = TcpStream::connect(self.addr).await?;
 
-        let (reader, writer) = connection.split();
-        let mut tcp_writer = FramedWrite::new(writer, LinesCodec::new());
+        let connection = TcpStream::connect(self.addr).await?;
+        let (reader, writer) = connection.into_split();
+        self.tcp_writer = Some(FramedWrite::new(writer, LinesCodec::new()));
         let mut tcp_reader = FramedRead::new(reader, LinesCodec::new());
-        let mut term_stream = crossterm::event::EventStream::new();
+
         while self.is_running {
-            terminal.draw(|f| self.draw_ui(f))?;
+            terminal.draw(|frame| self.draw_ui(frame))?;
             tokio::select! {
-                Some(event) = term_stream.next() => {
+                Some(event) = self.term_stream.next() => {
                     let event = Event::Terminal(event?);
-                    self.handle_event(event, &mut tcp_writer).await?;
+                    self.handle_event(event).await?;
                 },
                 Some(event) = self.event_receiver.recv() => {
-                    self.handle_event(event, &mut tcp_writer).await?;
+                    self.handle_event(event).await?;
                 }
                 Some(tcp_event) = tcp_reader.next() => {
-                    self.handle_tcp_event(tcp_event?, &mut tcp_writer).await?;
+                    self.handle_tcp_event(tcp_event?).await?;
                 },
             }
         }
+
         Ok(())
     }
 
-    pub async fn handle_event(
-        &mut self,
-        event: Event,
-        tcp_writer: &mut FramedWrite<WriteHalf<'_>, LinesCodec>,
-    ) -> anyhow::Result<()> {
+    pub async fn send(&mut self, command: ServerCommand) {
+        let framed = self.tcp_writer.as_mut().unwrap();
+        let _ = framed.send(command.to_string());
+    }
+
+    pub async fn handle_event(&mut self, event: Event) -> anyhow::Result<()> {
         match event {
             Event::Terminal(raw_event) => {
                 let input = Input::from(raw_event.clone());
@@ -94,28 +101,24 @@ impl App {
                     self.handle_popup_input(input, raw_event).await?;
                     return Ok(());
                 }
-                self.handle_key_input(input, tcp_writer).await?;
+                self.handle_key_input(input).await?;
             }
             // Send file to server
             Event::FileSelected(file) => {
                 let contents = tokio::fs::read(file.path()).await?;
                 let base64 = BASE64_STANDARD.encode(contents);
-                let command = ServerCommand::File(file.name().to_string(), base64).to_string();
-                tcp_writer.send(command).await?;
+                let command = ServerCommand::File(file.name().to_string(), base64);
+                self.send(command).await;
             }
         }
 
         Ok(())
     }
 
-    async fn handle_key_input(
-        &mut self,
-        input: Input,
-        tcp_writer: &mut FramedWrite<WriteHalf<'_>, LinesCodec>,
-    ) -> anyhow::Result<(), anyhow::Error> {
+    async fn handle_key_input(&mut self, input: Input) -> anyhow::Result<(), anyhow::Error> {
         match (input.ctrl, input.key) {
             (_, Key::Esc) => self.is_running = false,
-            (_, Key::Enter) => self.send_message(tcp_writer).await?,
+            (_, Key::Enter) => self.send_message().await?,
             (_, Key::Down) => self.message_list.state.select_previous(),
             (_, Key::Up) => self.message_list.state.select_next(),
             (true, Key::Char('e')) => self.show_file_explorer()?,
@@ -127,13 +130,11 @@ impl App {
         Ok(())
     }
 
-    async fn send_message(
-        &mut self,
-        tcp_writer: &mut FramedWrite<WriteHalf<'_>, LinesCodec>,
-    ) -> Result<(), anyhow::Error> {
+    async fn send_message(&mut self) -> Result<(), anyhow::Error> {
+        let sink = self.tcp_writer.as_mut().unwrap();
         Ok(if !self.text_area.is_empty() {
             for line in self.text_area.clone().into_lines() {
-                tcp_writer.send(line).await?;
+                sink.send(line).await?;
             }
             self.text_area.select_all();
             self.text_area.delete_line_by_end();
@@ -163,11 +164,7 @@ impl App {
     }
 
     #[allow(unused_variables)]
-    pub async fn handle_tcp_event(
-        &mut self,
-        event: String,
-        tcp_writer: &mut FramedWrite<WriteHalf<'_>, LinesCodec>,
-    ) -> anyhow::Result<()> {
+    pub async fn handle_tcp_event(&mut self, event: String) -> anyhow::Result<()> {
         let event = ServerEvent::from_json_str(&event)?;
         self.message_list.events.push(event.clone());
         match event {
@@ -179,8 +176,8 @@ impl App {
             | ServerEvent::RoomEvent(username, RoomEvent::Left(room)) => {
                 self.message_list.room = room.clone();
                 self.room_list.room = room;
-                tcp_writer.send(ServerCommand::Users.to_string()).await?;
-                tcp_writer.send(ServerCommand::Rooms.to_string()).await?;
+                self.send(ServerCommand::Users).await;
+                self.send(ServerCommand::Rooms).await;
             }
             ServerEvent::RoomEvent(username, RoomEvent::NameChange(new_username)) => {
                 if username == self.message_list.username {
