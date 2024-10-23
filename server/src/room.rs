@@ -1,4 +1,4 @@
-use common::ServerEvent;
+use common::{ServerEvent, Username};
 use dashmap::DashMap;
 use std::cmp::Ordering;
 use std::{collections::HashSet, sync::Arc};
@@ -9,7 +9,7 @@ pub const DEFAULT_ROOM: &str = "lobby";
 
 pub struct Room {
     tx: Sender<ServerEvent>,
-    users: HashSet<String>,
+    users: HashSet<Username>,
 }
 
 impl Room {
@@ -29,16 +29,16 @@ impl Rooms {
         Self(Arc::new(DashMap::with_capacity(8)))
     }
 
-    pub fn join(&self, room_name: &str, user_name: &str) -> Sender<ServerEvent> {
+    pub fn join(&self, room_name: &str, username: &Username) -> Sender<ServerEvent> {
         let mut room = self.0.entry(room_name.into()).or_insert(Room::new());
-        room.users.insert(user_name.into());
+        room.users.insert(username.clone());
         room.tx.clone()
     }
 
-    pub fn leave(&self, room_name: &str, user_name: &str) {
+    pub fn leave(&self, room_name: &str, username: &Username) {
         let mut delete_room = false;
         if let Some(mut room) = self.0.get_mut(room_name) {
-            room.users.remove(user_name);
+            room.users.remove(username);
             delete_room = room.tx.receiver_count() <= 1;
         }
         if delete_room {
@@ -46,15 +46,20 @@ impl Rooms {
         }
     }
 
-    pub fn change(&self, prev_room: &str, next_room: &str, user_name: &str) -> Sender<ServerEvent> {
-        self.leave(prev_room, user_name);
-        self.join(next_room, user_name)
+    pub fn change(
+        &self,
+        prev_room: &str,
+        next_room: &str,
+        username: &Username,
+    ) -> Sender<ServerEvent> {
+        self.leave(prev_room, &username);
+        self.join(next_room, username)
     }
 
-    pub fn change_name(&self, room_name: &str, prev_name: &str, new_name: &str) {
+    pub fn change_name(&self, room_name: &str, prev_name: &Username, new_name: &Username) {
         if let Some(mut room) = self.0.get_mut(room_name) {
             room.users.remove(prev_name);
-            room.users.insert(String::from(new_name));
+            room.users.insert(new_name.clone());
         }
     }
 
@@ -71,7 +76,7 @@ impl Rooms {
         list
     }
 
-    pub fn list_users(&self, room_name: &str) -> Option<Vec<String>> {
+    pub fn list_users(&self, room_name: &str) -> Option<Vec<Username>> {
         self.0.get(room_name).map(|room| {
             let mut users = room.users.iter().cloned().collect::<Vec<_>>();
             users.sort();

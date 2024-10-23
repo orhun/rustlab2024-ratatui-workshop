@@ -1,7 +1,7 @@
 use crate::{b, room::DEFAULT_ROOM, SERVER_COMMANDS};
 use std::{io::ErrorKind, net::SocketAddr};
 
-use common::{RoomEvent, ServerCommand, ServerEvent};
+use common::{RoomEvent, ServerCommand, ServerEvent, Username};
 use futures::SinkExt;
 use tokio::{net::TcpStream, sync::broadcast::error::RecvError};
 use tokio_stream::StreamExt;
@@ -15,13 +15,15 @@ pub struct Connection {
     tcp: TcpStream,
     users: Users,
     rooms: Rooms,
-    username: String,
+    username: Username,
     addr: SocketAddr,
 }
 
 impl Connection {
     pub fn new(tcp: TcpStream, users: Users, rooms: Rooms, addr: SocketAddr) -> Self {
-        let username = petname::petname(1, "").expect("failed to generate username");
+        let username = petname::petname(1, "")
+            .expect("failed to generate username")
+            .into();
         tracing::debug!("{addr} connected with the name: {username}");
         Self {
             tcp,
@@ -82,7 +84,8 @@ impl Connection {
                         }
                     };
                     if !user_msg.starts_with("/") {
-                        let _ = room_tx.send(ServerEvent::RoomEvent(self.username.to_string(), RoomEvent::Message(user_msg)));
+                        let event = ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Message(user_msg));
+                        let _ = room_tx.send(event);
                         continue;
                     }
 
@@ -91,10 +94,11 @@ impl Connection {
                             b!(sink.send(ServerEvent::Help(self.username.clone(), SERVER_COMMANDS.to_string()).as_json_str()).await);
                         },
                         Ok(ServerCommand::Name(new_name)) => {
-                            let changed_name = self.users.insert(new_name.clone());
+                            let changed_name = self.users.insert(&new_name);
                             if changed_name {
                                 self.rooms.change_name(&room_name, &self.username, &new_name);
-                                let _ = room_tx.send(ServerEvent::RoomEvent(self.username.to_string(), RoomEvent::NameChange(new_name.clone())));
+                                let event = ServerEvent::RoomEvent(self.username.clone(), RoomEvent::NameChange(new_name.clone()));
+                                let _ = room_tx.send(event);
                                 self.username = new_name;
                             } else {
                                 b!(sink.send(ServerEvent::Error(format!("{new_name} is already taken")).as_json_str()).await);
@@ -105,11 +109,11 @@ impl Connection {
                                 b!(sink.send(ServerEvent::Error(format!("You are in {room_name}")).as_json_str()).await);
                                 continue;
                             }
-                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.to_string(), RoomEvent::Left(room_name.clone())));
+                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Left(room_name.clone())));
                             room_tx = self.rooms.change(&room_name, &new_room, &self.username);
                             room_rx = room_tx.subscribe();
                             room_name = new_room;
-                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.to_string(), RoomEvent::Joined(room_name.clone())));
+                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Joined(room_name.clone())));
                         },
                         Ok(ServerCommand::Rooms) => {
                             let rooms_list = self.rooms.list();
@@ -120,7 +124,7 @@ impl Connection {
                             b!(sink.send(ServerEvent::Users(users_list).as_json_str()).await);
                         },
                         Ok(ServerCommand::File(filename, contents)) => {
-                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.to_string(), RoomEvent::File(filename.clone(), contents.clone())));
+                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::File(filename.clone(), contents.clone())));
                         },
                         Ok(ServerCommand::Quit) => {
                             break Ok(());
@@ -141,11 +145,11 @@ impl Connection {
                         // we just put the user back into the main
                         // room
                         Err(RecvError::Closed) => {
-                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.to_string(), RoomEvent::Left(room_name.clone())));
+                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Left(room_name.clone())));
                             room_tx = self.rooms.change(&room_name, DEFAULT_ROOM, &self.username);
                             room_rx = room_tx.subscribe();
                             room_name = DEFAULT_ROOM.into();
-                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.to_string(), RoomEvent::Joined(room_name.clone())));
+                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Joined(room_name.clone())));
                             continue;
                         },
                         // under high load we might not deliver all msgs

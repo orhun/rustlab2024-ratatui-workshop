@@ -1,3 +1,4 @@
+use common::Username;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -10,7 +11,7 @@ use tui_tree_widget::{Tree, TreeItem, TreeState};
 pub struct RoomList {
     pub state: TreeState<String>,
     pub rooms: Vec<String>,
-    pub users: Vec<String>,
+    pub users: Vec<Username>,
     pub room: String,
 }
 

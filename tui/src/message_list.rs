@@ -1,4 +1,4 @@
-use common::{RoomEvent, ServerEvent};
+use common::{RoomEvent, ServerEvent, Username};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -12,7 +12,7 @@ pub struct MessageList {
     pub state: ListState,
     pub events: Vec<ServerEvent>,
     pub room: String,
-    pub username: String,
+    pub username: Username,
 }
 
 impl Widget for &mut MessageList {
@@ -47,14 +47,14 @@ impl MessageList {
         match event {
             ServerEvent::Help(_, contents) => Some(Line::from(contents.as_str()).blue()),
             ServerEvent::RoomEvent(username, room_event) => {
-                self.room_event_line(username.as_str(), room_event)
+                self.room_event_line(username.clone(), room_event)
             }
             ServerEvent::Error(error) => Some(Line::from(format!("Error: {error}")).red()),
             _ => None,
         }
     }
 
-    fn room_event_line<'a>(&self, username: &'a str, event: &'a RoomEvent) -> Option<Line<'a>> {
+    fn room_event_line<'a>(&self, username: Username, event: &'a RoomEvent) -> Option<Line<'a>> {
         match event {
             RoomEvent::Message(message) => {
                 let color = if username == self.username {

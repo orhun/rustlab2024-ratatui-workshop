@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use anyhow::Ok;
 use base64::{prelude::BASE64_STANDARD, Engine};
-use common::{RoomEvent, ServerCommand, ServerEvent};
+use common::{RoomEvent, ServerCommand, ServerEvent, Username};
 use crossterm::event::{Event as CrosstermEvent, EventStream};
 use futures::{SinkExt, StreamExt};
 use ratatui::{style::Style, DefaultTerminal};
@@ -174,7 +174,7 @@ impl App {
         Ok(())
     }
 
-    async fn handle_room_event(&mut self, username: String, room_event: RoomEvent) {
+    async fn handle_room_event(&mut self, username: Username, room_event: RoomEvent) {
         match room_event {
             RoomEvent::Message(_message) => {}
             RoomEvent::Joined(room) | RoomEvent::Left(room) => {

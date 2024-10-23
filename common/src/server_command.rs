@@ -1,15 +1,8 @@
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
-
-mod username;
-
-pub use username::Username;
-
 pub enum ServerCommand {
     Help,
-    /// Set the client's username
-    Name(Username),
+    Name(String),
     Rooms,
     Join(String),
     Users,
@@ -38,7 +31,7 @@ impl TryFrom<String> for ServerCommand {
         match parts.next() {
             Some("/help") => Ok(ServerCommand::Help),
             Some("/name") => {
-                let name = parts.next().ok_or("Name is required")?.into();
+                let name = parts.next().ok_or("Name is required")?.to_string();
                 Ok(ServerCommand::Name(name))
             }
             Some("/rooms") => Ok(ServerCommand::Rooms),
@@ -55,35 +48,5 @@ impl TryFrom<String> for ServerCommand {
             Some("/quit") => Ok(ServerCommand::Quit),
             _ => Err(format!("Invalid command: {}", value)),
         }
-    }
-}
-
-pub type Room = String;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ServerEvent {
-    Help(Username, String),
-    RoomEvent(Username, RoomEvent),
-    Error(String),
-    Rooms(Vec<String>),
-    Users(Vec<Username>),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum RoomEvent {
-    Message(String),
-    File(String, String),
-    Joined(Room),
-    Left(Room),
-    NameChange(Username),
-}
-
-impl ServerEvent {
-    pub fn as_json_str(&self) -> String {
-        serde_json::to_string(self).unwrap()
-    }
-
-    pub fn from_json_str(json_str: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(json_str)
     }
 }
