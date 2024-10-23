@@ -1,16 +1,12 @@
-use std::{io, net::SocketAddr};
+use std::net::SocketAddr;
 
 use anyhow::Ok;
 use base64::{prelude::BASE64_STANDARD, Engine};
 use common::{RoomEvent, ServerCommand, ServerEvent};
 use crossterm::event::Event as CrosstermEvent;
 use futures::{SinkExt, StreamExt};
-use ratatui::{
-    style::{Color, Modifier, Style},
-    widgets::{Block, BorderType},
-    DefaultTerminal,
-};
-use ratatui_explorer::{File, FileExplorer, Theme};
+use ratatui::{style::Style, DefaultTerminal};
+use ratatui_explorer::File;
 use ratatui_image::picker::{Picker, ProtocolType};
 use tokio::{
     net::{tcp::OwnedWriteHalf, TcpStream},
@@ -143,8 +139,8 @@ impl App {
     }
 
     fn show_file_explorer(&mut self) -> Result<(), anyhow::Error> {
-        let file_explorer = create_file_explorer()?;
-        self.popup = Some(Popup::FileExplorer(file_explorer));
+        let popup = Popup::file_explorer()?;
+        self.popup = Some(popup);
         Ok(())
     }
 
@@ -229,21 +225,4 @@ fn create_text_area() -> TextArea<'static> {
     text_area.set_cursor_line_style(Style::default());
     text_area.set_placeholder_text("Start typing...");
     text_area
-}
-
-fn create_file_explorer() -> io::Result<FileExplorer> {
-    FileExplorer::with_theme(
-        Theme::default()
-            .add_default_title()
-            .with_title_bottom(|fe| format!("[ {} files ]", fe.files().len()).into())
-            .with_style(Style::default().fg(Color::Yellow))
-            .with_highlight_item_style(Style::default().add_modifier(Modifier::BOLD))
-            .with_highlight_dir_style(
-                Style::default()
-                    .fg(Color::Blue)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .with_highlight_symbol("> ")
-            .with_block(Block::bordered().border_type(BorderType::Rounded)),
-    )
 }

@@ -1,14 +1,32 @@
+use std::io;
+
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Rect},
-    widgets::{Clear, StatefulWidget, Widget},
+    style::{Color, Modifier, Style, Stylize},
+    widgets::{Block, BorderType, Clear, StatefulWidget, Widget},
 };
-use ratatui_explorer::FileExplorer;
+use ratatui_explorer::{FileExplorer, Theme};
 use ratatui_image::{protocol::StatefulProtocol, StatefulImage};
 
 pub enum Popup {
     FileExplorer(FileExplorer),
     ImagePreview(Box<dyn StatefulProtocol>),
+}
+
+impl Popup {
+    pub fn file_explorer() -> io::Result<Self> {
+        let theme = Theme::default()
+            .add_default_title()
+            .with_title_bottom(|fe| format!("[ {} files ]", fe.files().len()).into())
+            .with_style(Color::Yellow)
+            .with_highlight_item_style(Modifier::BOLD)
+            .with_highlight_dir_style(Style::new().blue().bold())
+            .with_highlight_symbol("> ")
+            .with_block(Block::bordered().border_type(BorderType::Rounded));
+        let file_explorer = FileExplorer::with_theme(theme)?;
+        Ok(Self::FileExplorer(file_explorer))
+    }
 }
 
 impl Widget for &mut Popup {
