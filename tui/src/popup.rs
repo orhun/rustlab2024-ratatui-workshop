@@ -1,8 +1,9 @@
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
+use ratatui_explorer::FileExplorer;
 use ratatui_image::protocol::StatefulProtocol;
 
 pub enum Popup {
-    FileExplorer,
+    FileExplorer(FileExplorer),
     ImagePreview(Box<dyn StatefulProtocol>),
 }
 

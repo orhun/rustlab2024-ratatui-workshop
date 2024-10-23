@@ -25,7 +25,6 @@ pub struct App {
     pub message_list: MessageList,
     pub room_list: RoomList,
     pub text_area: TextArea<'static>,
-    pub file_explorer: Option<FileExplorer>,
     pub popup: Option<Popup>,
     pub event_sender: UnboundedSender<Event>,
     pub event_receiver: UnboundedReceiver<Event>,
@@ -45,7 +44,6 @@ impl App {
             message_list: MessageList::default(),
             room_list: RoomList::default(),
             text_area: create_text_area(),
-            file_explorer: None,
             popup: None,
             event_sender,
             event_receiver,
@@ -62,22 +60,18 @@ impl App {
                 let input = Input::from(raw_event.clone());
                 // Handle popup
                 match self.popup {
-                    Some(Popup::FileExplorer) => {
+                    Some(Popup::FileExplorer(ref mut explorer)) => {
                         match input {
-                            Input { key: Key::Esc, .. } => {
-                                self.popup = None;
-                            }
+                            Input { key: Key::Esc, .. } => self.popup = None,
+
                             Input {
                                 key: Key::Enter, ..
                             } => {
+                                let event = Event::FileSelected(explorer.current().clone());
+                                self.event_sender.send(event)?;
                                 self.popup = None;
-                                let file = self.file_explorer.as_ref().unwrap().current();
-                                self.event_sender.send(Event::FileSelected(file.clone()))?;
                             }
-                            _ => {
-                                let explorer = self.file_explorer.as_mut().unwrap();
-                                explorer.handle(&raw_event)?;
-                            }
+                            _ => explorer.handle(&raw_event)?,
                         }
                         return Ok(());
                     }
@@ -121,9 +115,7 @@ impl App {
                         ..
                     } => {
                         let file_explorer = create_file_explorer()?;
-                        // todo store in Popup
-                        self.file_explorer = Some(file_explorer);
-                        self.popup = Some(Popup::FileExplorer);
+                        self.popup = Some(Popup::FileExplorer(file_explorer));
                     }
                     // Preview file
                     Input {

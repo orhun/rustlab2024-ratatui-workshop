@@ -28,10 +28,9 @@ impl App {
         frame.render_widget(&mut self.message_list, message_area);
         frame.render_widget(&mut self.room_list, room_area);
 
-        if let Some(Popup::FileExplorer) = self.popup {
+        if let Some(Popup::FileExplorer(ref explorer)) = self.popup {
             let popup_area = Popup::area(frame.area(), 50, 50);
             frame.render_widget(Clear, popup_area);
-            let explorer = self.file_explorer.as_ref().unwrap();
             frame.render_widget(&explorer.widget(), popup_area);
         } else if let Some(Popup::ImagePreview(protocol)) = &mut self.popup {
             let popup_area = Popup::area(frame.area(), 80, 80);
