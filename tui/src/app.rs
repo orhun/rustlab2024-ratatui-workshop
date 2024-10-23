@@ -39,23 +39,12 @@ pub enum Event {
 
 impl App {
     pub fn new() -> Self {
-        // Message list.
-        let message_list = MessageList::default();
-
-        // Room list.
-        let room_list = RoomList::default();
-
-        // Create text input
-        let mut text_area = TextArea::default();
-        text_area.set_cursor_line_style(Style::default());
-        text_area.set_placeholder_text("Start typing...");
-
         let (event_sender, event_receiver) = unbounded_channel();
         Self {
             is_running: true,
-            message_list,
-            room_list,
-            text_area,
+            message_list: MessageList::default(),
+            room_list: RoomList::default(),
+            text_area: create_text_area(),
             file_explorer: None,
             popup: None,
             event_sender,
@@ -212,6 +201,13 @@ impl App {
         }
         Ok(())
     }
+}
+
+fn create_text_area() -> TextArea<'static> {
+    let mut text_area = TextArea::default();
+    text_area.set_cursor_line_style(Style::default());
+    text_area.set_placeholder_text("Start typing...");
+    text_area
 }
 
 fn create_file_explorer() -> io::Result<FileExplorer> {
