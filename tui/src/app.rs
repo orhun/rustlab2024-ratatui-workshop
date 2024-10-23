@@ -63,23 +63,26 @@ impl App {
                 // Handle popup
                 match self.popup {
                     Some(Popup::FileExplorer) => {
-                        if let Input { key: Key::Esc, .. } = input {
-                            self.popup = None;
-                        } else if let Input {
-                            key: Key::Enter, ..
-                        } = input
-                        {
-                            self.popup = None;
-                            let file = self.file_explorer.as_ref().unwrap().current();
-                            self.event_sender.send(Event::FileSelected(file.clone()))?;
-                        } else {
-                            let explorer = self.file_explorer.as_mut().unwrap();
-                            explorer.handle(&raw_event)?;
+                        match input {
+                            Input { key: Key::Esc, .. } => {
+                                self.popup = None;
+                            }
+                            Input {
+                                key: Key::Enter, ..
+                            } => {
+                                self.popup = None;
+                                let file = self.file_explorer.as_ref().unwrap().current();
+                                self.event_sender.send(Event::FileSelected(file.clone()))?;
+                            }
+                            _ => {
+                                let explorer = self.file_explorer.as_mut().unwrap();
+                                explorer.handle(&raw_event)?;
+                            }
                         }
                         return Ok(());
                     }
                     Some(Popup::ImagePreview(_)) => {
-                        if let Input { key: Key::Esc, .. } = input {
+                        if matches!(input, Input { key: Key::Esc, .. }) {
                             self.popup = None;
                         }
                         return Ok(());
