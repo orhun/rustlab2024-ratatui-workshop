@@ -19,7 +19,7 @@ impl Widget for &mut RoomList {
         let leaves = self
             .rooms
             .iter()
-            .map(|room| {
+            .flat_map(|room| {
                 if room == &self.room {
                     TreeItem::new(
                         room.as_str().to_string(),
@@ -35,7 +35,6 @@ impl Widget for &mut RoomList {
                     TreeItem::new(room.as_str().to_string(), room.as_str(), vec![])
                 }
             })
-            .flatten()
             .collect::<Vec<TreeItem<String>>>();
 
         if let Ok(tree) = Tree::new(&leaves) {

@@ -91,7 +91,7 @@ impl App {
 
     pub async fn send(&mut self, command: ServerCommand) {
         let framed = self.tcp_writer.as_mut().unwrap();
-        let _ = framed.send(command.to_string());
+        let _ = framed.send(command.to_string()).await;
     }
 
     pub async fn handle_event(&mut self, event: Event) -> anyhow::Result<()> {
@@ -133,13 +133,14 @@ impl App {
 
     async fn send_message(&mut self) -> Result<(), anyhow::Error> {
         let sink = self.tcp_writer.as_mut().unwrap();
-        Ok(if !self.text_area.is_empty() {
+        if !self.text_area.is_empty() {
             for line in self.text_area.clone().into_lines() {
                 sink.send(line).await?;
             }
             self.text_area.select_all();
             self.text_area.delete_line_by_end();
-        })
+        }
+        Ok(())
     }
 
     fn show_file_explorer(&mut self) -> Result<(), anyhow::Error> {
@@ -150,18 +151,17 @@ impl App {
 
     fn preview_file(&mut self) -> Result<(), anyhow::Error> {
         let selected_event = self.message_list.selected_event();
-        Ok(
-            if let Some(ServerEvent::RoomEvent(_, RoomEvent::File(_, contents))) = selected_event {
-                let data = BASE64_STANDARD.decode(contents.as_bytes())?;
-                let img = image::load_from_memory(&data)?;
-                let user_fontsize = (7, 14);
-                let user_protocol = ProtocolType::Halfblocks;
-                let mut picker = Picker::new(user_fontsize);
-                picker.protocol_type = user_protocol;
-                let image = picker.new_resize_protocol(img);
-                self.popup = Some(Popup::ImagePreview(image));
-            },
-        )
+        if let Some(ServerEvent::RoomEvent(_, RoomEvent::File(_, contents))) = selected_event {
+            let data = BASE64_STANDARD.decode(contents.as_bytes())?;
+            let img = image::load_from_memory(&data)?;
+            let user_fontsize = (7, 14);
+            let user_protocol = ProtocolType::Halfblocks;
+            let mut picker = Picker::new(user_fontsize);
+            picker.protocol_type = user_protocol;
+            let image = picker.new_resize_protocol(img);
+            self.popup = Some(Popup::ImagePreview(image));
+        }
+        Ok(())
     }
 
     #[allow(unused_variables)]
@@ -216,13 +216,10 @@ impl App {
                 }
                 _ => explorer.handle(&raw_event)?,
             },
-            Some(Popup::ImagePreview(_)) => match input.key {
-                Key::Esc => {
-                    self.popup = None;
-                }
-                _ => {}
-            },
-            None => {}
+            Some(Popup::ImagePreview(_)) if input.key == Key::Esc => {
+                self.popup = None;
+            }
+            _ => {}
         }
         Ok(())
     }
