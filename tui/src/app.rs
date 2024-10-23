@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use anyhow::Ok;
 use base64::{prelude::BASE64_STANDARD, Engine};
 use common::{RoomEvent, ServerCommand, ServerEvent};
-use crossterm::event::Event as CrosstermEvent;
+use crossterm::event::{Event as CrosstermEvent, EventStream};
 use futures::{SinkExt, StreamExt};
 use ratatui::{style::Style, DefaultTerminal};
 use ratatui_explorer::File;
@@ -20,16 +20,17 @@ use crate::popup::Popup;
 use crate::room_list::RoomList;
 
 pub struct App {
-    pub addr: SocketAddr,
-    pub term_stream: crossterm::event::EventStream,
-    pub is_running: bool,
+    addr: SocketAddr,
+    term_stream: EventStream,
+    is_running: bool,
+    event_sender: UnboundedSender<Event>,
+    event_receiver: UnboundedReceiver<Event>,
+    tcp_writer: Option<FramedWrite<OwnedWriteHalf, LinesCodec>>,
+    // UI components (these need to be public as we define the draw_ui method not in a child module)
     pub message_list: MessageList,
     pub room_list: RoomList,
     pub text_area: TextArea<'static>,
     pub popup: Option<Popup>,
-    pub event_sender: UnboundedSender<Event>,
-    pub event_receiver: UnboundedReceiver<Event>,
-    pub tcp_writer: Option<FramedWrite<OwnedWriteHalf, LinesCodec>>,
 }
 
 #[derive(Clone)]
@@ -47,18 +48,18 @@ impl From<CrosstermEvent> for Event {
 impl App {
     pub fn new(addr: SocketAddr) -> Self {
         let (event_sender, event_receiver) = unbounded_channel();
-        let term_stream = crossterm::event::EventStream::new();
+        let term_stream = EventStream::new();
         Self {
             addr,
             term_stream,
             is_running: false,
+            event_sender,
+            event_receiver,
+            tcp_writer: None,
             message_list: MessageList::default(),
             room_list: RoomList::default(),
             text_area: create_text_area(),
             popup: None,
-            event_sender,
-            event_receiver,
-            tcp_writer: None,
         }
     }
 
