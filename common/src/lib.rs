@@ -2,16 +2,18 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-mod username;
-
+pub use room_name::RoomName;
 pub use username::Username;
+
+mod room_name;
+mod username;
 
 pub enum ServerCommand {
     Help,
     /// Set the client's username
     Name(Username),
     Rooms,
-    Join(String),
+    Join(RoomName),
     Users,
     File(String, String),
     Quit,
@@ -43,7 +45,7 @@ impl TryFrom<String> for ServerCommand {
             }
             Some("/rooms") => Ok(ServerCommand::Rooms),
             Some("/join") => {
-                let room = parts.next().ok_or("Room name is required")?.to_string();
+                let room = parts.next().ok_or("Room name is required")?.into();
                 Ok(ServerCommand::Join(room))
             }
             Some("/users") => Ok(ServerCommand::Users),
@@ -58,14 +60,12 @@ impl TryFrom<String> for ServerCommand {
     }
 }
 
-pub type Room = String;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServerEvent {
     Help(Username, String),
     RoomEvent(Username, RoomEvent),
     Error(String),
-    Rooms(Vec<String>),
+    Rooms(Vec<RoomName>),
     Users(Vec<Username>),
 }
 
@@ -73,8 +73,8 @@ pub enum ServerEvent {
 pub enum RoomEvent {
     Message(String),
     File(String, String),
-    Joined(Room),
-    Left(Room),
+    Joined(RoomName),
+    Left(RoomName),
     NameChange(Username),
 }
 

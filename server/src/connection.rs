@@ -52,7 +52,7 @@ impl Connection {
             return;
         }
 
-        let mut room_name = DEFAULT_ROOM.to_string();
+        let mut room_name = DEFAULT_ROOM.into();
         let mut room_tx = self.rooms.join(&room_name, &self.username);
         let mut room_rx = room_tx.subscribe();
         let _ = room_tx.send(ServerEvent::RoomEvent(
@@ -117,7 +117,7 @@ impl Connection {
                         },
                         Ok(ServerCommand::Rooms) => {
                             let rooms_list = self.rooms.list();
-                            b!(sink.send(ServerEvent::Rooms(rooms_list.iter().map(|(v1, _)| v1.to_string()).collect()).as_json_str()).await);
+                            b!(sink.send(ServerEvent::Rooms(rooms_list.iter().map(|(v1, _)| v1.clone()).collect()).as_json_str()).await);
                         },
                         Ok(ServerCommand::Users) => {
                             let users_list = self.rooms.list_users(&room_name).unwrap();
@@ -146,7 +146,7 @@ impl Connection {
                         // room
                         Err(RecvError::Closed) => {
                             let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Left(room_name.clone())));
-                            room_tx = self.rooms.change(&room_name, DEFAULT_ROOM, &self.username);
+                            room_tx = self.rooms.change(&room_name, &DEFAULT_ROOM.into(), &self.username);
                             room_rx = room_tx.subscribe();
                             room_name = DEFAULT_ROOM.into();
                             let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Joined(room_name.clone())));

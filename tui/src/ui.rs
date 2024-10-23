@@ -14,7 +14,10 @@ impl App {
 
         self.text_area.set_block(
             Block::bordered()
-                .title(format!("[ Send message ({}) ]", self.message_list.room))
+                .title(format!(
+                    "[ Send message ({}) ]",
+                    self.message_list.room_name
+                ))
                 .title_bottom(
                     Line::from(format!("[ {} ]", self.message_list.username)).right_aligned(),
                 ),

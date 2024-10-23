@@ -178,8 +178,8 @@ impl App {
         match room_event {
             RoomEvent::Message(_message) => {}
             RoomEvent::Joined(room) | RoomEvent::Left(room) => {
-                self.message_list.room = room.clone();
-                self.room_list.room = room;
+                self.message_list.room_name = room.clone();
+                self.room_list.room_name = room;
                 self.send(ServerCommand::Users).await;
                 self.send(ServerCommand::Rooms).await;
             }

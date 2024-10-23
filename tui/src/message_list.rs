@@ -1,4 +1,4 @@
-use common::{RoomEvent, ServerEvent, Username};
+use common::{RoomEvent, RoomName, ServerEvent, Username};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -11,7 +11,7 @@ use ratatui::{
 pub struct MessageList {
     pub state: ListState,
     pub events: Vec<ServerEvent>,
-    pub room: String,
+    pub room_name: RoomName,
     pub username: Username,
 }
 
