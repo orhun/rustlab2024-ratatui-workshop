@@ -1,5 +1,6 @@
 use std::io;
 
+use anyhow::Ok;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use common::{RoomEvent, ServerCommand, ServerEvent};
@@ -62,80 +63,72 @@ impl App {
                     self.handle_popup_input(input, raw_event).await?;
                     return Ok(());
                 }
-
-                // Handle key input
-                match input {
-                    // Esc
-                    Input { key: Key::Esc, .. } => self.is_running = false,
-                    // Enter
-                    Input {
-                        key: Key::Enter, ..
-                    } => {
-                        if !self.text_area.is_empty() {
-                            for line in self.text_area.clone().into_lines() {
-                                tcp_writer.send(line).await?;
-                            }
-                            self.text_area.select_all();
-                            self.text_area.delete_line_by_end();
-                        }
-                    }
-                    // Down
-                    Input { key: Key::Down, .. } => {
-                        self.message_list.state.select_previous();
-                    }
-                    // Up
-                    Input { key: Key::Up, .. } => {
-                        self.message_list.state.select_next();
-                    }
-                    // Show explorer
-                    Input {
-                        key: Key::Char('e'),
-                        ctrl: true,
-                        ..
-                    } => {
-                        let file_explorer = create_file_explorer()?;
-                        self.popup = Some(Popup::FileExplorer(file_explorer));
-                    }
-                    // Preview file
-                    Input {
-                        key: Key::Char('p'),
-                        ctrl: true,
-                        ..
-                    } => {
-                        let selected_event = self.message_list.selected_event();
-                        if let Some(ServerEvent::RoomEvent(_, RoomEvent::File(_, contents))) =
-                            selected_event
-                        {
-                            let data = BASE64_STANDARD.decode(contents.as_bytes())?;
-                            let img = image::load_from_memory(&data)?;
-                            let user_fontsize = (7, 14);
-                            let user_protocol = ProtocolType::Halfblocks;
-                            let mut picker = Picker::new(user_fontsize);
-                            picker.protocol_type = user_protocol;
-                            let image = picker.new_resize_protocol(img);
-                            self.popup = Some(Popup::ImagePreview(image));
-                        }
-                    }
-                    // Other key presses
-                    input => {
-                        self.text_area.input_without_shortcuts(input);
-                    }
-                }
+                self.handle_key_input(input, tcp_writer).await?;
             }
             // Send file to server
             Event::FileSelected(file) => {
-                if file.is_dir() {
-                    return Ok(());
-                }
                 let contents = tokio::fs::read(file.path()).await?;
                 let base64 = BASE64_STANDARD.encode(contents);
-                tcp_writer
-                    .send(ServerCommand::File(file.name().to_string(), base64).to_string())
-                    .await?;
+                let command = ServerCommand::File(file.name().to_string(), base64).to_string();
+                tcp_writer.send(command).await?;
             }
         }
 
         Ok(())
+    }
+
+    async fn handle_key_input(
+        &mut self,
+        input: Input,
+        tcp_writer: &mut FramedWrite<WriteHalf<'_>, LinesCodec>,
+    ) -> anyhow::Result<(), anyhow::Error> {
+        match (input.ctrl, input.key) {
+            (_, Key::Esc) => self.is_running = false,
+            (_, Key::Enter) => self.send_message(tcp_writer).await?,
+            (_, Key::Down) => self.message_list.state.select_previous(),
+            (_, Key::Up) => self.message_list.state.select_next(),
+            (true, Key::Char('e')) => self.show_file_explorer()?,
+            (true, Key::Char('p')) => self.preview_file()?,
+            (_, _) => {
+                let _ = self.text_area.input_without_shortcuts(input);
+            }
+        }
+        Ok(())
+    }
+
+    async fn send_message(
+        &mut self,
+        tcp_writer: &mut FramedWrite<WriteHalf<'_>, LinesCodec>,
+    ) -> Result<(), anyhow::Error> {
+        Ok(if !self.text_area.is_empty() {
+            for line in self.text_area.clone().into_lines() {
+                tcp_writer.send(line).await?;
+            }
+            self.text_area.select_all();
+            self.text_area.delete_line_by_end();
+        })
+    }
+
+    fn show_file_explorer(&mut self) -> Result<(), anyhow::Error> {
+        let file_explorer = create_file_explorer()?;
+        self.popup = Some(Popup::FileExplorer(file_explorer));
+        Ok(())
+    }
+
+    fn preview_file(&mut self) -> Result<(), anyhow::Error> {
+        let selected_event = self.message_list.selected_event();
+        Ok(
+            if let Some(ServerEvent::RoomEvent(_, RoomEvent::File(_, contents))) = selected_event {
+                let data = BASE64_STANDARD.decode(contents.as_bytes())?;
+                let img = image::load_from_memory(&data)?;
+                let user_fontsize = (7, 14);
+                let user_protocol = ProtocolType::Halfblocks;
+                let mut picker = Picker::new(user_fontsize);
+                picker.protocol_type = user_protocol;
+                let image = picker.new_resize_protocol(img);
+                self.popup = Some(Popup::ImagePreview(image));
+            },
+        )
     }
 
     #[allow(unused_variables)]
@@ -184,7 +177,11 @@ impl App {
             Some(Popup::FileExplorer(ref mut explorer)) => match input.key {
                 Key::Esc => self.popup = None,
                 Key::Enter => {
-                    let event = Event::FileSelected(explorer.current().clone());
+                    let file = explorer.current().clone();
+                    if file.is_dir() {
+                        return Ok(());
+                    }
+                    let event = Event::FileSelected(file);
                     let _ = self.event_sender.send(event);
                     self.popup = None;
                 }
