@@ -7,15 +7,13 @@ mod ui;
 
 use app::App;
 use args::Args;
-use tokio::net::TcpStream;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let addr = Args::parse_socket_addr();
-    let connection = TcpStream::connect(addr).await?;
-    let app = App::new();
+    let app = App::new(addr);
     let terminal = ratatui::init();
-    let result = app.run(terminal, connection).await;
+    let result = app.run(terminal).await;
     ratatui::restore();
     result
 }

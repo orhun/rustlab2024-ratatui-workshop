@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, net::SocketAddr};
 
 use anyhow::Ok;
 use base64::prelude::BASE64_STANDARD;
@@ -25,6 +25,7 @@ use crate::popup::Popup;
 use crate::room_list::RoomList;
 
 pub struct App {
+    pub addr: SocketAddr,
     pub is_running: bool,
     pub message_list: MessageList,
     pub room_list: RoomList,
@@ -41,10 +42,11 @@ pub enum Event {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(addr: SocketAddr) -> Self {
         let (event_sender, event_receiver) = unbounded_channel();
         Self {
-            is_running: true,
+            addr,
+            is_running: false,
             message_list: MessageList::default(),
             room_list: RoomList::default(),
             text_area: create_text_area(),
@@ -54,11 +56,10 @@ impl App {
         }
     }
 
-    pub async fn run(
-        mut self,
-        mut terminal: DefaultTerminal,
-        mut connection: TcpStream,
-    ) -> anyhow::Result<()> {
+    pub async fn run(mut self, mut terminal: DefaultTerminal) -> anyhow::Result<()> {
+        self.is_running = true;
+        let mut connection = TcpStream::connect(self.addr).await?;
+
         let (reader, writer) = connection.split();
         let mut tcp_writer = FramedWrite::new(writer, LinesCodec::new());
         let mut tcp_reader = FramedRead::new(reader, LinesCodec::new());
