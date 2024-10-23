@@ -16,7 +16,7 @@ pub struct RoomList {
 
 impl Widget for &mut RoomList {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let leaves = self
+        let leaves: Vec<TreeItem<String>> = self
             .rooms
             .iter()
             .flat_map(|room| {
@@ -35,7 +35,7 @@ impl Widget for &mut RoomList {
                     TreeItem::new(room.as_str().to_string(), room.as_str(), vec![])
                 }
             })
-            .collect::<Vec<TreeItem<String>>>();
+            .collect();
 
         if let Ok(tree) = Tree::new(&leaves) {
             let tree = tree

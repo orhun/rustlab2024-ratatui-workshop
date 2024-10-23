@@ -1,7 +1,9 @@
-use ratatui::layout::{Constraint, Layout};
-use ratatui::text::Line;
-use ratatui::widgets::Block;
-use ratatui::Frame;
+use ratatui::{
+    layout::{Constraint, Layout},
+    text::Line,
+    widgets::Block,
+    Frame,
+};
 
 use crate::app::App;
 

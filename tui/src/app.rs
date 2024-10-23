@@ -1,14 +1,13 @@
 use std::{io, net::SocketAddr};
 
 use anyhow::Ok;
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
+use base64::{prelude::BASE64_STANDARD, Engine};
 use common::{RoomEvent, ServerCommand, ServerEvent};
 use crossterm::event::Event as CrosstermEvent;
 use futures::{SinkExt, StreamExt};
-use ratatui::widgets::{Block, BorderType};
 use ratatui::{
     style::{Color, Modifier, Style},
+    widgets::{Block, BorderType},
     DefaultTerminal,
 };
 use ratatui_explorer::{File, FileExplorer, Theme};
