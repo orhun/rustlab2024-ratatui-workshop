@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use anyhow::Ok;
 use base64::{prelude::BASE64_STANDARD, Engine};
-use common::{RoomEvent, ServerCommand, ServerEvent, Username};
+use common::{RoomEvent, RoomName, ServerCommand, ServerEvent, Username};
 use crossterm::event::{Event as CrosstermEvent, EventStream};
 use futures::{SinkExt, StreamExt};
 use ratatui::{style::Style, DefaultTerminal};
@@ -190,9 +190,11 @@ impl App {
         self.message_list.events.push(event.clone());
         match event {
             ServerEvent::CommandHelp(username, _help) => self.message_list.username = username,
-            ServerEvent::RoomEvent { username, event } => {
-                self.handle_room_event(username, event).await
-            }
+            ServerEvent::RoomEvent {
+                room_name,
+                username,
+                event,
+            } => self.handle_room_event(room_name, username, event).await,
             ServerEvent::Error(_error) => {}
             ServerEvent::Rooms(rooms) => {
                 let names = rooms.iter().cloned().map(|(name, _count)| name).collect();
@@ -212,7 +214,12 @@ impl App {
         Ok(())
     }
 
-    async fn handle_room_event(&mut self, username: Username, room_event: RoomEvent) {
+    async fn handle_room_event(
+        &mut self,
+        _room_name: RoomName,
+        username: Username,
+        room_event: RoomEvent,
+    ) {
         match room_event {
             RoomEvent::Message(_message) => {}
             RoomEvent::Joined(room) | RoomEvent::Left(room) => {

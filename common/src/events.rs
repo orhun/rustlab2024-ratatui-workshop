@@ -9,6 +9,7 @@ pub enum ServerEvent {
     CommandHelp(Username, String),
     #[strum(to_string = "{username} {event}")]
     RoomEvent {
+        room_name: RoomName,
         username: Username,
         event: RoomEvent,
     },
@@ -43,8 +44,9 @@ impl ServerEvent {
         Self::Users(users)
     }
 
-    pub fn room_event(username: &Username, event: RoomEvent) -> Self {
+    pub fn room_event(room_name: &RoomName, username: &Username, event: RoomEvent) -> Self {
         Self::RoomEvent {
+            room_name: room_name.clone(),
             username: username.clone(),
             event,
         }

@@ -87,6 +87,7 @@ impl Room {
     }
 
     pub fn send_event(&self, username: &Username, event: RoomEvent) {
-        let _ = self.events.send(ServerEvent::room_event(username, event));
+        let event = ServerEvent::room_event(&self.name, username, event);
+        let _ = self.events.send(event);
     }
 }

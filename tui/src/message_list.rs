@@ -46,9 +46,11 @@ impl MessageList {
     fn server_event_line<'a>(&self, event: &'a ServerEvent) -> Option<Line<'a>> {
         match event {
             ServerEvent::CommandHelp(_, contents) => Some(Line::from(contents.as_str()).blue()),
-            ServerEvent::RoomEvent { username, event } => {
-                self.room_event_line(username.clone(), event)
-            }
+            ServerEvent::RoomEvent {
+                room_name: _,
+                username,
+                event,
+            } => self.room_event_line(username.clone(), event),
             ServerEvent::Error(error) => Some(Line::from(format!("Error: {error}")).red()),
             _ => None,
         }
