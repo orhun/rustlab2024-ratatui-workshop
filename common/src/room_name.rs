@@ -13,6 +13,10 @@ impl RoomName {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    pub fn lobby() -> Self {
+        Self("lobby".to_string())
+    }
 }
 
 impl fmt::Display for RoomName {

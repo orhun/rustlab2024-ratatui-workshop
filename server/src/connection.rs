@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
 use anyhow::Context;
-use common::{RoomEvent, ServerCommand, ServerEvent, Username};
+use common::{RoomEvent, RoomName, ServerCommand, ServerEvent, Username};
 use futures::SinkExt;
 use tokio::{net::TcpStream, sync::broadcast::Receiver};
 use tokio_stream::StreamExt;
@@ -32,8 +32,7 @@ impl Connection {
         let username = Username::random();
         tracing::info!("{addr} connected with the name: {username}");
         let user_events = Framed::new(tcp, LinesCodec::new());
-        let room = Rooms::lobby();
-        let room_events = room.subscribe();
+        let (room, room_events) = rooms.join(&username, &RoomName::lobby());
         Self {
             user_events,
             users,
@@ -59,8 +58,6 @@ impl Connection {
         let help = ServerEvent::help(&self.username, COMMANDS);
         self.send_event(help).await;
 
-        (self.room, self.room_events) = self.rooms.join(&self.username, Rooms::lobby().name());
-
         let rooms = self.rooms.list();
         self.send_event(ServerEvent::rooms(rooms)).await;
 
@@ -71,7 +68,7 @@ impl Connection {
             tracing::error!("Connection error: {err}");
         }
 
-        self.rooms.leave(&self.username, self.room.name());
+        self.rooms.leave(&self.username, &self.room);
         self.users.remove(&self.username);
         tracing::info!("disconnected");
     }
@@ -129,8 +126,7 @@ impl Connection {
             }
             ServerCommand::Join(new_room) => {
                 (self.room, self.room_events) =
-                    self.rooms
-                        .change(self.room.name(), &new_room, &self.username);
+                    self.rooms.change(&self.username, &self.room, &new_room);
             }
             ServerCommand::ListRooms => {
                 let rooms_list = self.rooms.list();

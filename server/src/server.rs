@@ -68,6 +68,14 @@ impl Users {
     pub fn iter(&self) -> impl Iterator<Item = Username> + '_ {
         self.inner.iter().map(|username| username.clone())
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -79,60 +87,63 @@ pub struct Rooms {
 impl Rooms {
     fn new(events: Sender<ServerEvent>) -> Self {
         let rooms = Arc::new(DashMap::new());
-        let lobby = Room::new("lobby".into());
+        let lobby = Room::new(RoomName::lobby());
         rooms.insert(lobby.name.clone(), lobby);
         Self { rooms, events }
     }
 
-    pub fn lobby() -> Room {
-        let name = RoomName::new("lobby".to_string());
-        Room::new(name)
-    }
-
     pub fn join(&self, username: &Username, room_name: &RoomName) -> (Room, Receiver<ServerEvent>) {
-        let room = self.rooms.entry(room_name.clone()).or_insert_with(|| {
-            let room = Room::new(room_name.clone());
-            self.send_server_event(ServerEvent::room_created(room_name));
-            room
-        });
+        let room = self
+            .rooms
+            .entry(room_name.clone())
+            .or_insert_with(|| self.create_room(room_name));
         let events = room.join(username);
         (room.clone(), events)
     }
 
-    pub fn leave(&self, username: &Username, room_name: &RoomName) {
-        tracing::debug!("User {username} leaving room {room_name}");
-        if let Some(room) = self.rooms.get_mut(room_name) {
-            room.users.remove(username);
-            if room.events.receiver_count() <= 1 && room.name.as_str() != "lobby" {
-                // remove the room if we're the last user in the room
-                self.rooms.remove(room_name);
-                self.send_server_event(ServerEvent::room_deleted(room_name));
-            } else {
-                tracing::debug!("receiver count: {}", room.events.receiver_count());
-                room.send_event(username, RoomEvent::left(room_name));
-            }
+    fn create_room(&self, room_name: &RoomName) -> Room {
+        tracing::debug!("Creating room {room_name}");
+        let room = Room::new(room_name.clone());
+        self.send_server_event(ServerEvent::room_created(room_name));
+        room
+    }
+
+    pub fn leave(&self, username: &Username, room: &Room) {
+        room.leave(username);
+        if room.is_empty() {
+            self.delete_room(&room);
         }
+    }
+
+    fn delete_room(&self, room: &Room) {
+        if room.is_lobby() {
+            tracing::debug!("no users in the lobby, not deleting");
+            return;
+        }
+        tracing::debug!("Deleting room {room}");
+        self.rooms.remove(room.name());
+        self.send_server_event(ServerEvent::room_deleted(room.name()));
     }
 
     pub fn change(
         &self,
-        prev_room: &RoomName,
-        next_room: &RoomName,
         username: &Username,
+        previous: &Room,
+        next: &RoomName,
     ) -> (Room, Receiver<ServerEvent>) {
-        if prev_room == next_room {
+        if next == previous.name() {
             let event = ServerEvent::error("You are already in that room");
             self.send_server_event(event);
         }
-        self.leave(username, prev_room);
-        self.join(username, next_room)
+        self.leave(username, previous);
+        self.join(username, next)
     }
 
     pub fn list(&self) -> Vec<(RoomName, usize)> {
         let mut list: Vec<_> = self
             .rooms
             .iter()
-            .map(|entry| (entry.key().clone(), entry.value().events.receiver_count()))
+            .map(|entry| (entry.key().clone(), entry.value().users.len()))
             .collect();
         list.sort_by(|a, b| match b.1.cmp(&a.1) {
             Ordering::Equal => a.0.cmp(&b.0),
@@ -163,10 +174,11 @@ impl Room {
     const ROOM_CHANNEL_CAPACITY: usize = 1024;
 
     /// Create a new room with the given name
-    fn new(name: RoomName) -> Self {
+    fn new(room_name: RoomName) -> Self {
+        tracing::debug!("Creating room {room_name}");
         let (events, _) = broadcast::channel(Self::ROOM_CHANNEL_CAPACITY);
         Self {
-            name,
+            name: room_name,
             events,
             users: Users::default(),
         }
@@ -179,13 +191,19 @@ impl Room {
 
     /// Adds the specified user to the room
     pub fn join(&self, username: &Username) -> Receiver<ServerEvent> {
+        tracing::debug!("User {username} joining room {self}");
         self.users.insert(username);
         let events = self.events.subscribe();
         self.send_event(username, RoomEvent::joined(&self.name));
         events
     }
 
+    /// Removes the specified user from the room
     pub fn leave(&self, username: &Username) {
+        tracing::debug!(
+            "User {username} leaving room {self} with {count} users",
+            count = self.users.len()
+        );
         self.users.remove(username);
         self.send_event(username, RoomEvent::left(&self.name));
     }
@@ -194,7 +212,16 @@ impl Room {
         self.users.iter().sorted().collect()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.users.is_empty()
+    }
+
+    pub fn is_lobby(&self) -> bool {
+        self.name.as_str() == "lobby"
+    }
+
     pub fn change_user_name(&self, old_name: &Username, new_name: &Username) {
+        tracing::debug!("User {old_name} changing name to {new_name} in room {self}");
         self.users.remove(old_name);
         self.users.insert(new_name);
         self.send_event(old_name, RoomEvent::name_change(new_name));
@@ -206,9 +233,5 @@ impl Room {
 
     pub fn send_event(&self, username: &Username, event: RoomEvent) {
         let _ = self.events.send(ServerEvent::room_event(username, event));
-    }
-
-    pub fn subscribe(&self) -> Receiver<ServerEvent> {
-        self.events.subscribe()
     }
 }
