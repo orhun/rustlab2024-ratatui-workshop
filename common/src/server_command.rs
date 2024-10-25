@@ -2,9 +2,9 @@ use std::fmt;
 
 use crate::{RoomName, Username};
 
+#[derive(Debug)]
 pub enum ServerCommand {
     Help,
-    /// Set the client's username
     ChangeUsername(Username),
     ListRooms,
     Join(RoomName),

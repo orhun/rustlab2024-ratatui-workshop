@@ -115,17 +115,30 @@ impl Connection {
     }
 
     async fn handle_message(&mut self, message: String) {
-        tracing::info!("Received message: {:?}", message);
         if !message.starts_with("/") {
+            tracing::info!("Received message: {:?}", message);
             self.room.send_message(&self.username, &message);
             return;
         }
         match ServerCommand::try_from(message) {
-            Ok(command) => self.handle_command(command).await,
+            Ok(command) => {
+                self.log_command(&command);
+                self.handle_command(command).await
+            }
             Err(err) => {
+                tracing::error!("Invalid command: {err}");
                 let event = ServerEvent::error(&format!("{err}, try /help"));
                 self.send_event(event).await;
             }
+        }
+    }
+
+    fn log_command(&self, command: &ServerCommand) {
+        if let ServerCommand::SendFile(filename, contents) = &command {
+            tracing::info!("Received file: {filename}");
+            tracing::trace!("Received file contents: {contents}");
+        } else {
+            tracing::info!("Received command: {command:?}");
         }
     }
 
