@@ -6,17 +6,19 @@ authors = ["Orhun Parmaksız <orhunparmaksiz@gmail.com>"]
 publish = false
 
 [dependencies]
-tokio = { version = "1", features = ["full"] }
-tokio-util = { version = "0.7", features = ["codec"] }
-futures = "0.3.30"
-tokio-stream = "0.1"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", default-features = true, features = ["env-filter", "parking_lot", "smallvec", "fmt", "tracing-log", "std", "ansi"] }
-tracing-appender = "0.2.3"
-dashmap = "6.1.0"
+anyhow = "1.0.91"
 clap = { version = "4.5.4", features = ["derive"] }
 clap_derive = "4.5.4"
-petname = "2.0.2"
-
+clap-verbosity-flag = "2.2.2"
 common = { path = "../common" }
+dashmap = "6.1.0"
+futures = "0.3.30"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+petname = "2.0.2"
 serde_json = "1.0.132"
+tokio-stream = "0.1"
+tracing = "0.1"
+tracing-appender = "0.2.3"
+tracing-log = "0.2.0"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

@@ -113,7 +113,7 @@ impl App {
                 self.popup = None;
                 let contents = tokio::fs::read(file.path()).await?;
                 let base64 = BASE64_STANDARD.encode(contents);
-                let command = ServerCommand::File(file.name().to_string(), base64);
+                let command = ServerCommand::SendFile(file.name().to_string(), base64);
                 self.send(command).await;
             }
             Event::PopupClosed => {
@@ -169,7 +169,10 @@ impl App {
     fn preview_file(&mut self) -> Result<(), anyhow::Error> {
         let selected_event = self.message_list.selected_event();
         let event_sender = self.event_sender.clone();
-        if let Some(ServerEvent::RoomEvent(_, RoomEvent::File(filename, contents))) = selected_event
+        if let Some(ServerEvent::RoomEvent {
+            event: RoomEvent::File { filename, contents },
+            ..
+        }) = selected_event
         {
             let popup = if filename.ends_with("png") {
                 Popup::image_preview(contents, event_sender)
@@ -183,16 +186,22 @@ impl App {
 
     pub async fn handle_server_event(&mut self, event: String) -> anyhow::Result<()> {
         let event = ServerEvent::from_json_str(&event)?;
-        tracing::debug!("Handling server event: {event:?}");
+        tracing::info!("Handling server event: {event:?}");
         self.message_list.events.push(event.clone());
         match event {
-            ServerEvent::Help(username, _help) => self.message_list.username = username,
-            ServerEvent::RoomEvent(username, room_event) => {
-                self.handle_room_event(username, room_event).await
+            ServerEvent::CommandHelp(username, _help) => self.message_list.username = username,
+            ServerEvent::RoomEvent { username, event } => {
+                self.handle_room_event(username, event).await
             }
             ServerEvent::Error(_error) => {}
-            ServerEvent::Rooms(rooms) => self.room_list.rooms = rooms,
+            ServerEvent::Rooms(rooms) => {
+                let names = rooms.iter().cloned().map(|(name, _count)| name).collect();
+                self.room_list.rooms = names
+            }
             ServerEvent::Users(users) => self.room_list.users = users,
+            ServerEvent::Disconnect => {
+                self.is_running = false;
+            }
         }
         Ok(())
     }
@@ -200,15 +209,23 @@ impl App {
     async fn handle_room_event(&mut self, username: Username, room_event: RoomEvent) {
         match room_event {
             RoomEvent::Message(_message) => {}
+            RoomEvent::Created(_) => {
+                self.send(ServerCommand::ListRooms).await;
+            }
+            RoomEvent::Deleted(_) => {
+                self.send(ServerCommand::ListRooms).await;
+            }
             RoomEvent::Joined(room) | RoomEvent::Left(room) => {
                 self.message_list.room_name = room.clone();
                 self.room_list.room_name = room;
-                self.send(ServerCommand::Users).await;
-                self.send(ServerCommand::Rooms).await;
+                self.send(ServerCommand::ListUsers).await;
+                self.send(ServerCommand::ListRooms).await;
             }
             RoomEvent::NameChange(new_username) => {
                 if username == self.message_list.username {
                     self.message_list.username = new_username;
+                } else {
+                    self.send(ServerCommand::ListUsers).await;
                 }
             }
             RoomEvent::Nudge(username) => {
@@ -216,7 +233,7 @@ impl App {
                     self.popup = Some(Popup::effect(self.event_sender.clone()));
                 }
             }
-            RoomEvent::File(_name, _contents) => {}
+            RoomEvent::File { .. } => {}
         }
     }
 }

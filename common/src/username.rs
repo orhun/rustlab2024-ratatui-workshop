@@ -7,6 +7,15 @@ use serde::{Deserialize, Serialize};
 pub struct Username(String);
 
 impl Username {
+    pub fn new(value: String) -> Self {
+        Self(value)
+    }
+
+    pub fn random() -> Self {
+        let username = petname::petname(1, "").expect("failed to generate petname");
+        Self(username)
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }

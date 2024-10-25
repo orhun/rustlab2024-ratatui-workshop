@@ -45,9 +45,9 @@ impl MessageList {
 
     fn server_event_line<'a>(&self, event: &'a ServerEvent) -> Option<Line<'a>> {
         match event {
-            ServerEvent::Help(_, contents) => Some(Line::from(contents.as_str()).blue()),
-            ServerEvent::RoomEvent(username, room_event) => {
-                self.room_event_line(username.clone(), room_event)
+            ServerEvent::CommandHelp(_, contents) => Some(Line::from(contents.as_str()).blue()),
+            ServerEvent::RoomEvent { username, event } => {
+                self.room_event_line(username.clone(), event)
             }
             ServerEvent::Error(error) => Some(Line::from(format!("Error: {error}")).red()),
             _ => None,
@@ -68,10 +68,16 @@ impl MessageList {
                     message.into(),
                 ]))
             }
-            RoomEvent::Joined(_) => {
-                Some(Line::from(format!("{username} joined the room")).italic())
+            RoomEvent::Created(room) => {
+                Some(Line::from(format!("You created the room {room}")).italic())
             }
-            RoomEvent::Left(_) => Some(Line::from(format!("{username} left the room")).italic()),
+            RoomEvent::Deleted(room) => {
+                Some(Line::from(format!("You deleted the room {room}")).italic())
+            }
+            RoomEvent::Joined(room) => {
+                Some(Line::from(format!("{username} joined {room}")).italic())
+            }
+            RoomEvent::Left(room) => Some(Line::from(format!("{username} left {room}")).italic()),
             RoomEvent::NameChange(name) => Some(Line::from(vec![
                 Span::from(username).cyan().bold(),
                 " is now known as ".into(),
@@ -82,10 +88,10 @@ impl MessageList {
                 " nudged ".into(),
                 Span::from(name).green().italic(),
             ])),
-            RoomEvent::File(file, _) => Some(Line::from(vec![
+            RoomEvent::File { filename, .. } => Some(Line::from(vec![
                 Span::from(username).cyan().bold(),
                 " sent a file: ".into(),
-                Span::from(file).red().magenta(),
+                Span::from(filename).red().magenta(),
             ])),
         }
     }

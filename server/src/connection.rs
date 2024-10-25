@@ -1,207 +1,165 @@
-use crate::{b, room::DEFAULT_ROOM, SERVER_COMMANDS};
-use std::{io::ErrorKind, net::SocketAddr};
+use std::net::SocketAddr;
 
+use anyhow::Context;
 use common::{RoomEvent, ServerCommand, ServerEvent, Username};
 use futures::SinkExt;
-use tokio::{net::TcpStream, sync::broadcast::error::RecvError};
+use tokio::{net::TcpStream, sync::broadcast::Receiver};
 use tokio_stream::StreamExt;
-use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec, LinesCodecError};
+use tokio_util::codec::{Framed, LinesCodec};
+use tracing::instrument;
 
-use crate::{room::Rooms, user::Users};
-
-const MAX_MSG_LEN: usize = usize::MAX;
+use crate::server::{Room, Rooms, Users, COMMANDS};
 
 pub struct Connection {
-    tcp: TcpStream,
+    user_events: Framed<TcpStream, LinesCodec>,
     users: Users,
     rooms: Rooms,
     username: Username,
     addr: SocketAddr,
+    state: ConnectionState,
+    room: Room,
+    room_events: Receiver<ServerEvent>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ConnectionState {
+    Connected,
+    Disconnected,
 }
 
 impl Connection {
     pub fn new(tcp: TcpStream, users: Users, rooms: Rooms, addr: SocketAddr) -> Self {
-        let username = petname::petname(1, "")
-            .expect("failed to generate username")
-            .into();
-        tracing::debug!("{addr} connected with the name: {username}");
+        let username = Username::random();
+        tracing::info!("{addr} connected with the name: {username}");
+        let user_events = Framed::new(tcp, LinesCodec::new());
+        let room = Rooms::lobby();
+        let room_events = room.subscribe();
         Self {
-            tcp,
+            user_events,
             users,
             rooms,
             username,
             addr,
+            state: ConnectionState::Connected,
+            room,
+            room_events,
         }
     }
 
-    pub async fn handle(&mut self) {
-        let (reader, writer) = self.tcp.split();
-        let mut stream = FramedRead::new(reader, LinesCodec::new_with_max_length(MAX_MSG_LEN));
-        let mut sink = FramedWrite::new(writer, LinesCodec::new_with_max_length(MAX_MSG_LEN));
+    async fn send_event(&mut self, event: ServerEvent) {
+        tracing::debug!(?event, "Sending event");
+        if let Err(err) = self.user_events.send(event.as_json_str()).await {
+            tracing::error!("Failed to send event: {err}");
+            self.state = ConnectionState::Disconnected;
+        }
+    }
 
-        let mut exit_result = sink
-            .send(
-                ServerEvent::Help(self.username.clone(), SERVER_COMMANDS.to_string()).as_json_str(),
-            )
+    #[instrument(skip(self), fields(addr = %self.addr, username = %self.username))]
+    pub async fn handle(&mut self) {
+        self.send_event(ServerEvent::help(&self.username, COMMANDS))
             .await;
-        // let mut exit_result = sink
-        //     .send(format!("{SERVER_COMMANDS}\nYou are {}", self.username))
-        //     .await;
-        if should_exit(exit_result) {
-            self.users.remove(&self.username);
+
+        (self.room, self.room_events) = self.rooms.join(&Rooms::lobby().name, &self.username);
+
+        let rooms = self.rooms.list();
+        self.send_event(ServerEvent::rooms(rooms)).await;
+
+        let users = self.rooms.list_users(&Rooms::lobby().name).unwrap();
+        self.send_event(ServerEvent::users(users)).await;
+
+        if let Err(err) = self.run().await {
+            tracing::error!("Connection error: {err}");
+        }
+
+        self.rooms.leave(&self.room.name, &self.username);
+        self.users.remove(&self.username);
+        tracing::info!("disconnected");
+    }
+
+    async fn run(&mut self) -> anyhow::Result<()> {
+        while self.state == ConnectionState::Connected {
+            tokio::select! {
+                Some(message) = self.user_events.next() => {
+                    let message = message.context("failed to read from stream")?;
+                    self.handle_message(message).await;
+                },
+                event = self.room_events.recv() => {
+                    let event = event.context("failed to read from room events")?;
+                    self.send_event(event).await;
+                },
+                else => {
+                    tracing::error!("Connection closed");
+                    break;
+                },
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_message(&mut self, message: String) {
+        tracing::info!("Received message: {:?}", message);
+        if !message.starts_with("/") {
+            self.room.send_message(&self.username, &message);
             return;
         }
+        match ServerCommand::try_from(message) {
+            Ok(command) => self.handle_command(command).await,
+            Err(err) => {
+                let event = ServerEvent::error(&format!("{err}, try /help"));
+                self.send_event(event).await;
+            }
+        }
+    }
 
-        let mut room_name = DEFAULT_ROOM.into();
-        let mut room_tx = self.rooms.join(&room_name, &self.username);
-        let mut room_rx = room_tx.subscribe();
-        let _ = room_tx.send(ServerEvent::RoomEvent(
-            self.username.clone(),
-            RoomEvent::Joined(room_name.clone()),
-        ));
-
-        let mut discarding_long_msg = false;
-
-        exit_result = loop {
-            tokio::select! {
-                user_msg = stream.next() => {
-                    let user_msg = match user_msg {
-                        Some(Ok(msg)) => msg,
-                        Some(Err(LinesCodecError::MaxLineLengthExceeded)) => {
-                            b!(sink.send(ServerEvent::Error(format!("Messages can only be {MAX_MSG_LEN} chars long")).as_json_str()).await);
-                            discarding_long_msg = true;
-                            continue;
-                        }
-                        Some(Err(LinesCodecError::Io(io_err))) => match io_err.kind() {
-                            ErrorKind::InvalidData | ErrorKind::InvalidInput
-                            | ErrorKind::BrokenPipe | ErrorKind::ConnectionReset => break Ok(()),
-                            _ => break Err(LinesCodecError::Io(io_err)),
-                        },
-                        None if !discarding_long_msg => break Ok(()),
-                        None => {
-                            discarding_long_msg = false;
-                            continue;
-                        }
-                    };
-                    if !user_msg.starts_with("/") {
-                        let event = ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Message(user_msg));
-                        let _ = room_tx.send(event);
-                        continue;
-                    }
-
-                    match ServerCommand::try_from(user_msg.clone()) {
-                        Ok(ServerCommand::Help) => {
-                            b!(sink.send(ServerEvent::Help(self.username.clone(), SERVER_COMMANDS.to_string()).as_json_str()).await);
-                        },
-                        Ok(ServerCommand::Name(new_name)) => {
-                            let changed_name = self.users.insert(&new_name);
-                            if changed_name {
-                                self.rooms.change_name(&room_name, &self.username, &new_name);
-                                let event = ServerEvent::RoomEvent(self.username.clone(), RoomEvent::NameChange(new_name.clone()));
-                                let _ = room_tx.send(event);
-                                self.username = new_name;
-                            } else {
-                                b!(sink.send(ServerEvent::Error(format!("{new_name} is already taken")).as_json_str()).await);
-                            }
-                        },
-                        Ok(ServerCommand::Join(new_room)) => {
-                            if new_room == room_name {
-                                b!(sink.send(ServerEvent::Error(format!("You are in {room_name}")).as_json_str()).await);
-                                continue;
-                            }
-                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Left(room_name.clone())));
-                            room_tx = self.rooms.change(&room_name, &new_room, &self.username);
-                            room_rx = room_tx.subscribe();
-                            room_name = new_room;
-                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Joined(room_name.clone())));
-                        },
-                        Ok(ServerCommand::Rooms) => {
-                            let rooms_list = self.rooms.list();
-                            b!(sink.send(ServerEvent::Rooms(rooms_list.iter().map(|(v1, _)| v1.clone()).collect()).as_json_str()).await);
-                        },
-                        Ok(ServerCommand::Users) => {
-                            if let Some(users_list) = self.rooms.list_users(&room_name) {
-                                b!(sink.send(ServerEvent::Users(users_list).as_json_str()).await);
-                            }
-                        },
-                        Ok(ServerCommand::File(filename, contents)) => {
-                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::File(filename.clone(), contents.clone())));
-                        },
-                        Ok(ServerCommand::Nudge(username)) => {
-                            if let Some(users_list) = self.rooms.list_users(&room_name) {
-                                if users_list.contains(&username) {
-                                    let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Nudge(username)));
-                                } else {
-                                    b!(sink.send(ServerEvent::Error(format!("user not found")).as_json_str()).await);
-                                }
-                            }
-                        },
-                        Ok(ServerCommand::Quit) => {
-                            break Ok(());
-                        },
-                        Err(err) => {
-                            b!(sink.send(ServerEvent::Error(format!("{err}, try /help")).as_json_str()).await);
-                        }
-                    };
-
-                }
-                peer_msg = room_rx.recv() => {
-                    let peer_msg = match peer_msg {
-                        Ok(ok) => ok,
-                        // we would get this error if all tx
-                        // were dropped for this rx, which is not
-                        // possible since we're holding a tx,
-                        // but if this were to somehow ever happen
-                        // we just put the user back into the main
-                        // room
-                        Err(RecvError::Closed) => {
-                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Left(room_name.clone())));
-                            room_tx = self.rooms.change(&room_name, &DEFAULT_ROOM.into(), &self.username);
-                            room_rx = room_tx.subscribe();
-                            room_name = DEFAULT_ROOM.into();
-                            let _ = room_tx.send(ServerEvent::RoomEvent(self.username.clone(), RoomEvent::Joined(room_name.clone())));
-                            continue;
-                        },
-                        // under high load we might not deliver all msgs
-                        // to all users in a room, in which case we let
-                        // them know that we dropped some msgs
-                        Err(RecvError::Lagged(n)) => {
-                            tracing::warn!("Server dropped {n} messages for {room_name} with {} users", room_tx.receiver_count());
-                            b!(sink.send(ServerEvent::Error(format!("Server is very busy and dropped {n} messages, sorry!")).as_json_str()).await);
-                            continue;
-                        }
-                    };
-                    b!(sink.send(serde_json::to_string(&peer_msg).unwrap()).await);
+    async fn handle_command(&mut self, command: ServerCommand) {
+        match command {
+            ServerCommand::Help => {
+                self.send_event(ServerEvent::help(&self.username, COMMANDS))
+                    .await;
+            }
+            ServerCommand::ChangeUsername(new_name) => {
+                let changed_name = self.users.insert(&new_name);
+                if changed_name {
+                    self.room.change_user_name(&self.username, &new_name);
+                    self.username = new_name;
+                } else {
+                    let message = format!("{new_name} is already taken");
+                    self.send_event(ServerEvent::error(&message)).await;
                 }
             }
-        };
-
-        let _ = room_tx.send(ServerEvent::RoomEvent(
-            self.username.clone(),
-            RoomEvent::Left(room_name.clone()),
-        ));
-        tracing::debug!("{} disconnected (name: {})", self.addr, self.username);
-        self.rooms.leave(&room_name, &self.username);
-        self.users.remove(&self.username);
-        should_exit(exit_result);
-    }
-}
-
-fn should_exit(result: Result<(), LinesCodecError>) -> bool {
-    match result {
-        Ok(_) => false,
-        Err(LinesCodecError::MaxLineLengthExceeded) => true,
-        Err(LinesCodecError::Io(err))
-            if matches!(
-                err.kind(),
-                ErrorKind::BrokenPipe | ErrorKind::ConnectionReset
-            ) =>
-        {
-            true
-        }
-        Err(LinesCodecError::Io(err)) => {
-            tracing::error!("unexpected error: {err}");
-            true
+            ServerCommand::Join(new_room) => {
+                (self.room, self.room_events) =
+                    self.rooms
+                        .change(&self.room.name, &new_room, &self.username);
+            }
+            ServerCommand::ListRooms => {
+                let rooms_list = self.rooms.list();
+                self.send_event(ServerEvent::rooms(rooms_list)).await;
+            }
+            ServerCommand::ListUsers => {
+                if let Some(users_list) = self.rooms.list_users(&self.room.name) {
+                    self.send_event(ServerEvent::users(users_list)).await;
+                }
+            }
+            ServerCommand::SendFile(filename, contents) => {
+                self.room
+                    .send_event(&self.username, RoomEvent::file(&filename, &contents));
+            }
+            ServerCommand::Nudge(username) => {
+                if let Some(users_list) = self.rooms.list_users(&self.room.name) {
+                    if users_list.contains(&username) {
+                        let nudge = RoomEvent::Nudge(username);
+                        self.room.send_event(&self.username, nudge);
+                    } else {
+                        self.send_event(ServerEvent::error("user not found")).await;
+                    }
+                }
+            }
+            ServerCommand::Quit => {
+                self.room.leave(&self.username);
+                self.send_event(ServerEvent::Disconnect).await;
+                self.state = ConnectionState::Disconnected;
+            }
         }
     }
 }
