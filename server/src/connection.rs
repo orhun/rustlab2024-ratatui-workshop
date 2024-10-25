@@ -64,7 +64,7 @@ impl Connection {
         let rooms = self.rooms.list();
         self.send_event(ServerEvent::rooms(rooms)).await;
 
-        let users = self.rooms.list_users(&Rooms::lobby().name).unwrap();
+        let users = self.room.list_users();
         self.send_event(ServerEvent::users(users)).await;
 
         if let Err(err) = self.run().await {
@@ -137,22 +137,20 @@ impl Connection {
                 self.send_event(ServerEvent::rooms(rooms_list)).await;
             }
             ServerCommand::ListUsers => {
-                if let Some(users_list) = self.rooms.list_users(&self.room.name) {
-                    self.send_event(ServerEvent::users(users_list)).await;
-                }
+                let users = self.room.list_users();
+                self.send_event(ServerEvent::users(users)).await;
             }
             ServerCommand::SendFile(filename, contents) => {
                 self.room
                     .send_event(&self.username, RoomEvent::file(&filename, &contents));
             }
             ServerCommand::Nudge(username) => {
-                if let Some(users_list) = self.rooms.list_users(&self.room.name) {
-                    if users_list.contains(&username) {
-                        let nudge = RoomEvent::Nudge(username);
-                        self.room.send_event(&self.username, nudge);
-                    } else {
-                        self.send_event(ServerEvent::error("user not found")).await;
-                    }
+                let users = self.room.list_users();
+                if users.contains(&username) {
+                    let nudge = RoomEvent::Nudge(username);
+                    self.room.send_event(&self.username, nudge);
+                } else {
+                    self.send_event(ServerEvent::error("user not found")).await;
                 }
             }
             ServerCommand::Quit => {

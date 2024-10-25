@@ -157,10 +157,6 @@ impl Rooms {
         list
     }
 
-    pub fn list_users(&self, room_name: &RoomName) -> Option<Vec<Username>> {
-        self.rooms.get(room_name).map(|room| room.users.users())
-    }
-
     pub fn send_room_event(&self, username: &Username, event: RoomEvent) {
         let event = ServerEvent::room_event(username, event);
         let _ = self.events.send(event);
@@ -198,6 +194,10 @@ impl Room {
     pub fn leave(&self, username: &Username) {
         self.users.remove(username);
         self.send_event(username, RoomEvent::left(&self.name));
+    }
+
+    pub fn list_users(&self) -> Vec<Username> {
+        self.users.users()
     }
 
     pub fn change_user_name(&self, old_name: &Username, new_name: &Username) {
