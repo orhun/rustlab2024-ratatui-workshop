@@ -11,14 +11,24 @@ use tracing::instrument;
 use crate::server::{Room, Rooms, Users, COMMANDS};
 
 pub struct Connection {
+    /// The events that are come from the user
     user_events: Framed<TcpStream, LinesCodec>,
-    users: Users,
-    rooms: Rooms,
-    username: Username,
-    addr: SocketAddr,
-    state: ConnectionState,
-    room: Room,
+    /// The events that are broadcasted to all users
+    server_events: Receiver<ServerEvent>,
+    /// The events that are broadcasted to the user's current room
     room_events: Receiver<ServerEvent>,
+    /// The users that are connected to the server
+    users: Users,
+    /// The rooms that are available on the server
+    rooms: Rooms,
+    /// The username of the connected user
+    username: Username,
+    /// The address of the connected user
+    addr: SocketAddr,
+    /// The current state of the connection
+    state: ConnectionState,
+    /// The room that the user is currently in
+    room: Room,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,20 +38,27 @@ enum ConnectionState {
 }
 
 impl Connection {
-    pub fn new(tcp: TcpStream, users: Users, rooms: Rooms, addr: SocketAddr) -> Self {
+    pub fn new(
+        tcp: TcpStream,
+        server_events: Receiver<ServerEvent>,
+        users: Users,
+        rooms: Rooms,
+        addr: SocketAddr,
+    ) -> Self {
         let username = Username::random();
         tracing::info!("{addr} connected with the name: {username}");
         let user_events = Framed::new(tcp, LinesCodec::new());
         let (room, room_events) = rooms.join(&username, &RoomName::lobby());
         Self {
             user_events,
+            server_events,
+            room_events,
             users,
             rooms,
             username,
             addr,
             state: ConnectionState::Connected,
             room,
-            room_events,
         }
     }
 
@@ -82,6 +99,10 @@ impl Connection {
                 },
                 event = self.room_events.recv() => {
                     let event = event.context("failed to read from room events")?;
+                    self.send_event(event).await;
+                },
+                event = self.server_events.recv() => {
+                    let event = event.context("failed to read from server events")?;
                     self.send_event(event).await;
                 },
                 else => {
@@ -127,6 +148,8 @@ impl Connection {
             ServerCommand::Join(new_room) => {
                 (self.room, self.room_events) =
                     self.rooms.change(&self.username, &self.room, &new_room);
+                let users = self.room.list_users();
+                self.send_event(ServerEvent::users(users)).await;
             }
             ServerCommand::ListRooms => {
                 let rooms_list = self.rooms.list();

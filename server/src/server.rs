@@ -17,6 +17,7 @@ pub struct Server {
     listener: TcpListener,
     users: Users,
     rooms: Rooms,
+    event_tx: Sender<ServerEvent>,
 }
 
 impl Server {
@@ -30,6 +31,7 @@ impl Server {
             listener,
             users: Users::default(),
             rooms: Rooms::new(event_tx.clone()),
+            event_tx,
         })
     }
 
@@ -42,8 +44,10 @@ impl Server {
                     continue;
                 }
             };
-            let mut connection =
-                Connection::new(stream, self.users.clone(), self.rooms.clone(), addr);
+            let users = self.users.clone();
+            let rooms = self.rooms.clone();
+            let events = self.event_tx.subscribe();
+            let mut connection = Connection::new(stream, events, users, rooms, addr);
             tokio::spawn(async move {
                 connection.handle().await;
             });
