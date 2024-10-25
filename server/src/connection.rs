@@ -56,8 +56,8 @@ impl Connection {
 
     #[instrument(skip(self), fields(addr = %self.addr, username = %self.username))]
     pub async fn handle(&mut self) {
-        self.send_event(ServerEvent::help(&self.username, COMMANDS))
-            .await;
+        let help = ServerEvent::help(&self.username, COMMANDS);
+        self.send_event(help).await;
 
         (self.room, self.room_events) = self.rooms.join(&Rooms::lobby().name, &self.username);
 
@@ -114,8 +114,8 @@ impl Connection {
     async fn handle_command(&mut self, command: ServerCommand) {
         match command {
             ServerCommand::Help => {
-                self.send_event(ServerEvent::help(&self.username, COMMANDS))
-                    .await;
+                let help = ServerEvent::help(&self.username, COMMANDS);
+                self.send_event(help).await;
             }
             ServerCommand::ChangeUsername(new_name) => {
                 let changed_name = self.users.insert(&new_name);
