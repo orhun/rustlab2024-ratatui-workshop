@@ -89,7 +89,7 @@ impl Rooms {
         Room::new(name)
     }
 
-    pub fn join(&self, room_name: &RoomName, username: &Username) -> (Room, Receiver<ServerEvent>) {
+    pub fn join(&self, username: &Username, room_name: &RoomName) -> (Room, Receiver<ServerEvent>) {
         let room = self.rooms.entry(room_name.clone()).or_insert_with(|| {
             let room = Room::new(room_name.clone());
             self.send_server_event(ServerEvent::room_created(room_name));
@@ -99,7 +99,7 @@ impl Rooms {
         (room.clone(), events)
     }
 
-    pub fn leave(&self, room_name: &RoomName, username: &Username) {
+    pub fn leave(&self, username: &Username, room_name: &RoomName) {
         tracing::debug!("User {username} leaving room {room_name}");
         if let Some(room) = self.rooms.get_mut(room_name) {
             room.users.remove(username);
@@ -124,8 +124,8 @@ impl Rooms {
             let event = ServerEvent::error("You are already in that room");
             self.send_server_event(event);
         }
-        self.leave(prev_room, username);
-        self.join(next_room, username)
+        self.leave(username, prev_room);
+        self.join(username, next_room)
     }
 
     pub fn list(&self) -> Vec<(RoomName, usize)> {
