@@ -11,7 +11,10 @@ use tracing_subscriber::EnvFilter;
 use self::server::Server;
 
 mod connection;
+mod room;
+mod rooms;
 mod server;
+mod users;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {

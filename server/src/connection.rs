@@ -8,7 +8,7 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::{Framed, LinesCodec};
 use tracing::instrument;
 
-use crate::server::{Room, Rooms, Users, COMMANDS};
+use crate::{room::Room, rooms::Rooms, server::COMMANDS, users::Users};
 
 pub struct Connection {
     /// The events that are come from the user
