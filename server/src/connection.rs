@@ -59,7 +59,7 @@ impl Connection {
         let help = ServerEvent::help(&self.username, COMMANDS);
         self.send_event(help).await;
 
-        (self.room, self.room_events) = self.rooms.join(&Rooms::lobby().name, &self.username);
+        (self.room, self.room_events) = self.rooms.join(Rooms::lobby().name(), &self.username);
 
         let rooms = self.rooms.list();
         self.send_event(ServerEvent::rooms(rooms)).await;
@@ -71,7 +71,7 @@ impl Connection {
             tracing::error!("Connection error: {err}");
         }
 
-        self.rooms.leave(&self.room.name, &self.username);
+        self.rooms.leave(self.room.name(), &self.username);
         self.users.remove(&self.username);
         tracing::info!("disconnected");
     }
@@ -130,7 +130,7 @@ impl Connection {
             ServerCommand::Join(new_room) => {
                 (self.room, self.room_events) =
                     self.rooms
-                        .change(&self.room.name, &new_room, &self.username);
+                        .change(self.room.name(), &new_room, &self.username);
             }
             ServerCommand::ListRooms => {
                 let rooms_list = self.rooms.list();

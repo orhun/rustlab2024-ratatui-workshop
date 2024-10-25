@@ -1852,6 +1852,7 @@ dependencies = [
  "common",
  "dashmap",
  "futures",
+ "itertools 0.13.0",
  "petname",
  "serde_json",
  "tokio",

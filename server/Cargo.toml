@@ -13,6 +13,7 @@ clap-verbosity-flag = "2.2.2"
 common = { path = "../common" }
 dashmap = "6.1.0"
 futures = "0.3.30"
+itertools = "0.13.0"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
 tokio-util = { version = "0.7", features = ["codec"] }
 petname = "2.0.2"

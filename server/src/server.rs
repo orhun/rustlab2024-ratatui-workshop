@@ -2,6 +2,7 @@ use std::{cmp::Ordering, fmt, net::SocketAddr, sync::Arc};
 
 use common::{RoomEvent, RoomName, ServerEvent, Username};
 use dashmap::{DashMap, DashSet, Entry};
+use itertools::Itertools;
 use tokio::{
     net::TcpListener,
     sync::broadcast::{self, Receiver, Sender},
@@ -51,25 +52,21 @@ impl Server {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct Users(Arc<DashSet<Username>>);
+pub struct Users {
+    inner: Arc<DashSet<Username>>,
+}
 
 impl Users {
     pub fn insert(&self, username: &Username) -> bool {
-        self.0.insert(username.clone())
+        self.inner.insert(username.clone())
     }
 
     pub fn remove(&self, username: &Username) -> bool {
-        self.0.remove(username).is_some()
+        self.inner.remove(username).is_some()
     }
 
-    pub fn users(&self) -> Vec<Username> {
-        let mut users = self
-            .0
-            .iter()
-            .map(|username| username.clone())
-            .collect::<Vec<_>>();
-        users.sort();
-        users
+    pub fn iter(&self) -> impl Iterator<Item = Username> + '_ {
+        self.inner.iter().map(|username| username.clone())
     }
 }
 
@@ -77,13 +74,6 @@ impl Users {
 pub struct Rooms {
     rooms: Arc<DashMap<RoomName, Room>>,
     events: Sender<ServerEvent>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Room {
-    pub name: RoomName,
-    events: Sender<ServerEvent>,
-    users: Users,
 }
 
 impl Rooms {
@@ -167,6 +157,13 @@ impl Rooms {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Room {
+    name: RoomName,
+    events: Sender<ServerEvent>,
+    users: Users,
+}
+
 impl fmt::Display for Room {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name)
@@ -176,16 +173,22 @@ impl fmt::Display for Room {
 impl Room {
     const ROOM_CHANNEL_CAPACITY: usize = 1024;
 
+    /// Create a new room with the given name
     fn new(name: RoomName) -> Self {
         let (events, _) = broadcast::channel(Self::ROOM_CHANNEL_CAPACITY);
-        let users = Users::default();
         Self {
             name,
             events,
-            users,
+            users: Users::default(),
         }
     }
 
+    /// Returns the name of the room
+    pub fn name(&self) -> &RoomName {
+        &self.name
+    }
+
+    /// Adds the specified user to the room
     pub fn join(&self, username: &Username) {
         self.users.insert(username);
         self.send_event(username, RoomEvent::joined(&self.name));
@@ -197,7 +200,7 @@ impl Room {
     }
 
     pub fn list_users(&self) -> Vec<Username> {
-        self.users.users()
+        self.users.iter().sorted().collect()
     }
 
     pub fn change_user_name(&self, old_name: &Username, new_name: &Username) {
