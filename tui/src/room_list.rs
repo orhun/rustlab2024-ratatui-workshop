@@ -15,6 +15,16 @@ pub struct RoomList {
     pub room_name: RoomName,
 }
 
+impl RoomList {
+    pub fn push_room(&mut self, room: RoomName) {
+        self.rooms.push(room);
+    }
+
+    pub fn remove_room(&mut self, room: &RoomName) {
+        self.rooms.retain(|r| r != room);
+    }
+}
+
 impl Widget for &mut RoomList {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let leaves: Vec<TreeItem<String>> = self

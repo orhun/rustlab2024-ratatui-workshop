@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, fmt, net::SocketAddr, sync::Arc};
 
 use common::{RoomEvent, RoomName, ServerEvent, Username};
-use dashmap::{DashMap, DashSet, Entry};
+use dashmap::{DashMap, DashSet};
 use itertools::Itertools;
 use tokio::{
     net::TcpListener,
@@ -90,18 +90,12 @@ impl Rooms {
     }
 
     pub fn join(&self, room_name: &RoomName, username: &Username) -> (Room, Receiver<ServerEvent>) {
-        let room = match self.rooms.entry(room_name.clone()) {
-            Entry::Occupied(entry) => entry,
-            Entry::Vacant(entry) => {
-                let room = Room::new(room_name.clone());
-                let room = entry.insert_entry(room);
-                self.send_room_event(username, RoomEvent::created(room_name));
-                room
-            }
-        };
-        let room = room.get();
-        let events = room.subscribe();
-        room.join(username);
+        let room = self.rooms.entry(room_name.clone()).or_insert_with(|| {
+            let room = Room::new(room_name.clone());
+            self.send_server_event(ServerEvent::room_created(room_name));
+            room
+        });
+        let events = room.join(username);
         (room.clone(), events)
     }
 
@@ -112,7 +106,7 @@ impl Rooms {
             if room.events.receiver_count() <= 1 && room.name.as_str() != "lobby" {
                 // remove the room if we're the last user in the room
                 self.rooms.remove(room_name);
-                self.send_room_event(username, RoomEvent::deleted(room_name));
+                self.send_server_event(ServerEvent::room_deleted(room_name));
             } else {
                 tracing::debug!("receiver count: {}", room.events.receiver_count());
                 room.send_event(username, RoomEvent::left(room_name));
@@ -145,11 +139,6 @@ impl Rooms {
             ordering => ordering,
         });
         list
-    }
-
-    pub fn send_room_event(&self, username: &Username, event: RoomEvent) {
-        let event = ServerEvent::room_event(username, event);
-        let _ = self.events.send(event);
     }
 
     pub fn send_server_event(&self, event: ServerEvent) {
@@ -189,9 +178,11 @@ impl Room {
     }
 
     /// Adds the specified user to the room
-    pub fn join(&self, username: &Username) {
+    pub fn join(&self, username: &Username) -> Receiver<ServerEvent> {
         self.users.insert(username);
+        let events = self.events.subscribe();
         self.send_event(username, RoomEvent::joined(&self.name));
+        events
     }
 
     pub fn leave(&self, username: &Username) {

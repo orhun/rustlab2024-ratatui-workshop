@@ -68,12 +68,6 @@ impl MessageList {
                     message.into(),
                 ]))
             }
-            RoomEvent::Created(room) => {
-                Some(Line::from(format!("You created the room {room}")).italic())
-            }
-            RoomEvent::Deleted(room) => {
-                Some(Line::from(format!("You deleted the room {room}")).italic())
-            }
             RoomEvent::Joined(room) => {
                 Some(Line::from(format!("{username} joined {room}")).italic())
             }

@@ -198,6 +198,12 @@ impl App {
                 let names = rooms.iter().cloned().map(|(name, _count)| name).collect();
                 self.room_list.rooms = names
             }
+            ServerEvent::RoomCreated(room_name) => {
+                self.room_list.push_room(room_name);
+            }
+            ServerEvent::RoomDeleted(room_name) => {
+                self.room_list.remove_room(&room_name);
+            }
             ServerEvent::Users(users) => self.room_list.users = users,
             ServerEvent::Disconnect => {
                 self.is_running = false;
@@ -209,12 +215,6 @@ impl App {
     async fn handle_room_event(&mut self, username: Username, room_event: RoomEvent) {
         match room_event {
             RoomEvent::Message(_message) => {}
-            RoomEvent::Created(_) => {
-                self.send(ServerCommand::ListRooms).await;
-            }
-            RoomEvent::Deleted(_) => {
-                self.send(ServerCommand::ListRooms).await;
-            }
             RoomEvent::Joined(room) | RoomEvent::Left(room) => {
                 self.message_list.room_name = room.clone();
                 self.room_list.room_name = room;

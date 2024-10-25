@@ -12,6 +12,10 @@ pub enum ServerEvent {
         username: Username,
         event: RoomEvent,
     },
+    #[strum(to_string = "Room Created({0})")]
+    RoomCreated(RoomName),
+    #[strum(to_string = "Room Deleted({0})")]
+    RoomDeleted(RoomName),
     #[strum(to_string = "Error({0})")]
     Error(String),
     #[strum(to_string = "Rooms({0:?})")]
@@ -46,6 +50,14 @@ impl ServerEvent {
         }
     }
 
+    pub fn room_created(room_name: &RoomName) -> Self {
+        Self::RoomCreated(room_name.clone())
+    }
+
+    pub fn room_deleted(room_name: &RoomName) -> Self {
+        Self::RoomDeleted(room_name.clone())
+    }
+
     pub fn as_json_str(&self) -> String {
         serde_json::to_string(self).unwrap()
     }
@@ -58,10 +70,6 @@ impl ServerEvent {
 #[derive(Debug, Clone, Serialize, Deserialize, Display)]
 pub enum RoomEvent {
     #[strum(to_string = "created room {0}")]
-    Created(RoomName),
-    #[strum(to_string = "deleted room {0}")]
-    Deleted(RoomName),
-    #[strum(to_string = "sent message: {0}")]
     Message(String),
     #[strum(to_string = "sent file: {filename}")]
     File { filename: String, contents: String },
@@ -76,14 +84,6 @@ pub enum RoomEvent {
 }
 
 impl RoomEvent {
-    pub fn created(room_name: &RoomName) -> Self {
-        Self::Created(room_name.clone())
-    }
-
-    pub fn deleted(room_name: &RoomName) -> Self {
-        Self::Deleted(room_name.clone())
-    }
-
     pub fn message(message: &str) -> Self {
         Self::Message(message.to_string())
     }
