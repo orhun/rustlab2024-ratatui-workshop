@@ -22,7 +22,7 @@ impl Logger {
     }
 
     pub async fn handle_input(&mut self, input: Input) -> anyhow::Result<()> {
-        tracing::info!("Logger input: {:?}", input);
+        tracing::debug!("Logger input: {:?}", input);
         match (input.ctrl, input.key) {
             (true, Key::Char('l')) => {
                 let _ = self.event_sender.send(Event::LoggerClosed);
