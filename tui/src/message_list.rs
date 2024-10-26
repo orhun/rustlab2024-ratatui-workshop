@@ -95,13 +95,7 @@ impl MessageList {
                 " is now known as ".into(),
                 Span::from(name).green().italic(),
             ])),
-            RoomEvent::Nudge(name) => Some(Line::from(vec![
-                date.italic(),
-                " | ".into(),
-                Span::from(username).cyan(),
-                " nudged ".into(),
-                Span::from(name).green().italic(),
-            ])),
+            RoomEvent::Nudge(_) => None,
             RoomEvent::File { filename, .. } => Some(Line::from(vec![
                 date.italic(),
                 " | ".into(),
