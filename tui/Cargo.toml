@@ -6,13 +6,9 @@ authors = ["Orhun Parmaksız <orhunparmaksiz@gmail.com>"]
 publish = false
 
 [dependencies]
-common = { path = "../common" }
-
-anyhow = "1.0.90"
-clap = { version = "4.5.20", features = ["derive"] }
-crossterm = { version = "0.28.1", features = ["event-stream"] }
-futures = "0.3.31"
 ratatui = "0.28.1"
-textwrap = "0.16.1"
+crossterm = { version = "0.28.1", features = ["event-stream"] }
+anyhow = "1.0.90"
+
 tokio = { version = "1.40.0", features = ["full"] }
-tokio-util = { version = "0.7.12", features = ["codec"] }
+futures = "0.3.31"

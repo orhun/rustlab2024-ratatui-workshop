@@ -19,9 +19,9 @@ A terminal chat application that supports sending messages, files, and images.
 ### Chapters
 
 1. Initialization
-2. Text input ([`tui-textarea`](https://github.com/rhysd/tui-textarea))
-3. List
-4. Scrollbar
+2. List
+3. Scrollbar
+4. Text input ([`tui-textarea`](https://github.com/rhysd/tui-textarea))
 5. Tree widget ([`tui-tree-widget`](https://github.com/EdJoPaTo/tui-rs-tree-widget))
 6. Popups
 7. File explorer ([`ratatui-explorer`](https://github.com/tatounee/ratatui-explorer))
