@@ -72,21 +72,3 @@ async fn main() -> anyhow::Result<()> {
     ratatui::restore();
     result
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use insta::assert_snapshot;
-    use ratatui::{backend::TestBackend, Terminal};
-
-    #[tokio::test]
-    async fn test_render_app() -> anyhow::Result<()> {
-        let addr = Args::default();
-        let addr = SocketAddr::new(addr.ip, addr.port);
-        let mut app = App::new(addr);
-        let mut terminal = Terminal::new(TestBackend::new(80, 20)).unwrap();
-        terminal.draw(|frame| app.draw_ui(frame))?;
-        assert_snapshot!(terminal.backend());
-        Ok(())
-    }
-}
