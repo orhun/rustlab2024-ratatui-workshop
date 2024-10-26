@@ -23,11 +23,6 @@ impl App {
                 ),
         );
         frame.render_widget(&self.text_area, text_area);
-
-        let [message_area, room_area] =
-            Layout::horizontal(Constraint::from_percentages([80, 20])).areas(message_area);
-
         frame.render_widget(&mut self.message_list, message_area);
-        frame.render_widget(&mut self.room_list, room_area);
     }
 }
