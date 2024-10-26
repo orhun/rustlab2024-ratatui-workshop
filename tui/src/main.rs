@@ -2,7 +2,6 @@ use clap::Parser;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 mod app;
-mod message_list;
 
 use app::App;
 
