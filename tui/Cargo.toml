@@ -1,8 +1,0 @@
-[package]
-name = "tui"
-version = "0.1.0"
-edition = "2021"
-authors = ["Orhun Parmaksız <orhunparmaksiz@gmail.com>"]
-publish = false
-
-[dependencies]
