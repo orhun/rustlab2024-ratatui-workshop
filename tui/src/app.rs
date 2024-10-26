@@ -66,7 +66,7 @@ impl App {
         Self {
             addr,
             term_stream,
-            is_running: true,
+            is_running: false,
             event_sender,
             event_receiver,
             tcp_writer: None,
