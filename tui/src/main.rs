@@ -3,7 +3,6 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 mod app;
 mod message_list;
-mod popup;
 mod room_list;
 mod ui;
 

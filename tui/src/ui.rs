@@ -29,9 +29,5 @@ impl App {
 
         frame.render_widget(&mut self.message_list, message_area);
         frame.render_widget(&mut self.room_list, room_area);
-
-        if let Some(popup) = &mut self.popup {
-            frame.render_widget(popup, frame.area());
-        }
     }
 }
