@@ -4,12 +4,11 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, List, ListDirection, ListItem, ListState, StatefulWidget, Widget},
+    widgets::{Block, List, ListDirection, ListItem, Widget},
 };
 
 #[derive(Debug, Clone, Default)]
 pub struct MessageList {
-    pub state: ListState,
     pub events: Vec<ServerEvent>,
     pub room_name: RoomName,
     pub username: Username,
@@ -32,17 +31,11 @@ impl Widget for &mut MessageList {
             .repeat_highlight_symbol(true)
             .direction(ListDirection::BottomToTop);
 
-        StatefulWidget::render(list, area, buf, &mut self.state);
+        Widget::render(list, area, buf);
     }
 }
 
 impl MessageList {
-    pub fn selected_event(&self) -> Option<ServerEvent> {
-        self.state
-            .selected()
-            .map(|v| self.events[self.events.len() - (v + 1)].clone())
-    }
-
     fn server_event_line<'a>(&self, event: &'a ServerEvent) -> Option<Line<'a>> {
         match event {
             ServerEvent::CommandHelp(_, contents) => Some(Line::from(contents.as_str()).blue()),
