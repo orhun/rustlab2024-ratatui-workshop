@@ -171,15 +171,11 @@ impl App {
         let selected_event = self.message_list.selected_event();
         let event_sender = self.event_sender.clone();
         if let Some(ServerEvent::RoomEvent {
-            event: RoomEvent::File { filename, contents },
+            event: RoomEvent::File { contents, .. },
             ..
         }) = selected_event
         {
-            let popup = if filename.ends_with("jpg") {
-                Popup::image_preview(contents, event_sender)
-            } else {
-                Popup::markdown_preview(contents, event_sender)
-            }?;
+            let popup = Popup::image_preview(contents, event_sender)?;
             self.popup = Some(popup);
         }
         Ok(())
