@@ -16,4 +16,3 @@ ratatui = "0.28.1"
 textwrap = "0.16.1"
 tokio = { version = "1.40.0", features = ["full"] }
 tokio-util = { version = "0.7.12", features = ["codec"] }
-tui-textarea = "0.6.1"

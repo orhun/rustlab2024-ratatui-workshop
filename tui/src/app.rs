@@ -2,12 +2,11 @@ use std::net::SocketAddr;
 
 use anyhow::Ok;
 use common::{Command, RoomEvent, RoomName, ServerEvent, Username};
-use crossterm::event::EventStream;
+use crossterm::event::{Event, EventStream, KeyCode};
 use futures::{SinkExt, StreamExt};
-use ratatui::{style::Style, DefaultTerminal};
+use ratatui::DefaultTerminal;
 use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
 use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
-use tui_textarea::{Input, Key, TextArea};
 
 use crate::message_list::MessageList;
 
@@ -18,7 +17,6 @@ pub struct App {
     tcp_writer: Option<FramedWrite<OwnedWriteHalf, LinesCodec>>,
     // UI components (these need to be public as we define the draw_ui method not in a child module)
     pub message_list: MessageList,
-    pub text_area: TextArea<'static>,
 }
 
 impl App {
@@ -30,7 +28,6 @@ impl App {
             is_running: false,
             tcp_writer: None,
             message_list: MessageList::default(),
-            text_area: create_text_area(),
         }
     }
 
@@ -43,41 +40,19 @@ impl App {
         let mut tcp_reader = FramedRead::new(reader, LinesCodec::new());
 
         while self.is_running {
-            terminal.draw(|frame| self.draw_ui(frame))?;
+            terminal.draw(|frame| frame.render_widget(&mut self.message_list, frame.area()))?;
             tokio::select! {
                 Some(crossterm_event) = self.term_stream.next() => {
                     let crossterm_event = crossterm_event?;
-                    let input = Input::from(crossterm_event.clone());
-                    self.handle_key_input(input).await?;
+                    if let Event::Key(key_event) = crossterm_event {
+                        if key_event.code == KeyCode::Esc {
+                            let framed = self.tcp_writer.as_mut().unwrap();
+                            let _ = framed.send(Command::Quit.to_string()).await;
+                        }
+                    }
                 },
                 Some(tcp_event) = tcp_reader.next() => self.handle_server_event(tcp_event?).await?,
             }
-        }
-        Ok(())
-    }
-
-    async fn handle_key_input(&mut self, input: Input) -> anyhow::Result<(), anyhow::Error> {
-        match input.key {
-            Key::Esc => {
-                let framed = self.tcp_writer.as_mut().unwrap();
-                let _ = framed.send(Command::Quit.to_string()).await;
-            }
-            Key::Enter => self.send_message().await?,
-            _ => {
-                let _ = self.text_area.input_without_shortcuts(input);
-            }
-        }
-        Ok(())
-    }
-
-    async fn send_message(&mut self) -> Result<(), anyhow::Error> {
-        let sink = self.tcp_writer.as_mut().unwrap();
-        if !self.text_area.is_empty() {
-            for line in self.text_area.clone().into_lines() {
-                sink.send(line).await?;
-            }
-            self.text_area.select_all();
-            self.text_area.delete_line_by_end();
         }
         Ok(())
     }
@@ -125,11 +100,4 @@ impl App {
             RoomEvent::File { .. } => {}
         }
     }
-}
-
-fn create_text_area() -> TextArea<'static> {
-    let mut text_area = TextArea::default();
-    text_area.set_cursor_line_style(Style::default());
-    text_area.set_placeholder_text("Start typing...");
-    text_area
 }
