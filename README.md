@@ -32,43 +32,6 @@ A terminal chat application that supports sending messages, files, and images.
 12. Testing ([`insta`](https://github.com/mitsuhiko/insta))
 13. Customizations
 
-### Architecture
-
-```mermaid
-graph TD
-    Server -->|TCP| Client
-    Client -->|TCP| Server
-
-    subgraph Architecture
-        direction TB
-        Server[Server]
-        Client[Client / TUI]
-    end
-```
-
-```mermaid
-sequenceDiagram
-    participant Client as Client
-    participant Server as Server
-
-    Client->>Server: Connect via TCP (127.0.0.1:42069)
-    Server-->>Client: CommandHelp
-    Server-->>Client: Rooms: [lobby]
-    Server-->>Client: Users: [foo, bar]
-    Server-->>Client: RoomEvent: Joined
-
-    Client->>Server: Send message
-    Server-->>Client: RoomEvent: Message
-
-    Client->>Server: Send message ("/join room")
-    Server-->>Client: Users: [baz]
-    Server-->>Client: RoomEvent: Joined
-    Server-->>Client: RoomCreated
-
-    Client->>Server: Send message ("/quit")
-    Server-->>Client: Disconnect
-```
-
 ## Getting Started
 
 ### Prerequisites
@@ -87,16 +50,9 @@ Simply start by cloning this repository:
 git clone https://github.com/orhun/rustlab2024
 ```
 
-The repository contains a [cargo workspace](https://doc.rust-lang.org/cargo/reference/workspaces.html) with the following crates:
+Your job is to implement a terminal client for a chat application using Ratatui!
 
-- `server`: A TCP server that handles the communication between clients.
-- `common`: Shared types (e.g. commands, events) for the server and client.
-
-Your job is to implement the terminal client for this chat application using Ratatui!
-
-### Start cooking!
-
-TODO
+Begin by following the chapters in [workshop/00_intro.md](./workshop/00_intro.md)
 
 ## References
 
