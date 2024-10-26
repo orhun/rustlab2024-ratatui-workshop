@@ -784,15 +784,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fxhash"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "getopts"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2342,7 +2333,6 @@ dependencies = [
  "crossterm",
  "futures",
  "image",
- "log",
  "ratatui",
  "ratatui-explorer",
  "ratatui-image",
@@ -2350,29 +2340,9 @@ dependencies = [
  "textwrap",
  "tokio",
  "tokio-util",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "tui-logger",
  "tui-markdown",
  "tui-textarea",
  "tui-tree-widget",
-]
-
-[[package]]
-name = "tui-logger"
-version = "0.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "618b8256e4b8f2abf852121f2d72f9d0e7f091a6456e46d0e786b640e86ad130"
-dependencies = [
- "chrono",
- "fxhash",
- "lazy_static",
- "log",
- "parking_lot",
- "ratatui",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
