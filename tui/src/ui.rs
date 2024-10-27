@@ -24,5 +24,7 @@ impl App {
         );
         frame.render_widget(&self.text_area, text_area);
         frame.render_widget(&mut self.message_list, message_area);
+
+        // TODO: render room list
     }
 }
