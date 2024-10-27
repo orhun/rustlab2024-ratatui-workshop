@@ -25,3 +25,6 @@ tracing = "0.1.40"
 tui-logger = { version = "0.13.2", features = ["tracing-support"] }
 log = "0.4.22"
 tachyonfx = "0.7.0"
+
+[dev-dependencies]
+insta = "1.40.0"

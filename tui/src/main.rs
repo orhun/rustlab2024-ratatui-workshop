@@ -72,3 +72,15 @@ async fn main() -> anyhow::Result<()> {
     ratatui::restore();
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use insta::assert_snapshot;
+    use ratatui::{backend::TestBackend, Terminal};
+
+    #[tokio::test]
+    async fn test_render_app() -> anyhow::Result<()> {
+        todo!("write test")
+    }
+}
