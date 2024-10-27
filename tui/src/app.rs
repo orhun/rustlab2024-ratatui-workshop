@@ -8,6 +8,7 @@ use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 use tui_textarea::{Input, Key, TextArea};
 
 use crate::message_list::MessageList;
+use crate::room_list::RoomList;
 
 fn create_text_area() -> TextArea<'static> {
     let mut text_area = TextArea::default();
@@ -23,6 +24,7 @@ pub struct App {
     tcp_writer: Option<FramedWrite<OwnedWriteHalf, LinesCodec>>,
     // UI components (these need to be public as we define the draw_ui method not in a child module)
     pub message_list: MessageList,
+    pub room_list: RoomList,
     pub text_area: TextArea<'static>,
 }
 
@@ -35,6 +37,7 @@ impl App {
             is_running: false,
             tcp_writer: None,
             message_list: MessageList::default(),
+            room_list: RoomList::default(),
             text_area: create_text_area(),
         }
     }
@@ -61,12 +64,16 @@ impl App {
         Ok(())
     }
 
+    pub async fn send(&mut self, command: Command) {
+        if let Some(writer) = self.tcp_writer.as_mut() {
+            let _ = writer.send(command.to_string()).await;
+        }
+    }
+
     async fn handle_key_input(&mut self, input: Input) -> anyhow::Result<()> {
         match input.key {
             Key::Esc => {
-                if let Some(writer) = self.tcp_writer.as_mut() {
-                    let _ = writer.send(Command::Quit.to_string()).await;
-                }
+                self.send(Command::Quit).await;
             }
             Key::Enter => self.send_message().await?,
             _ => {
@@ -101,13 +108,20 @@ impl App {
                 ..
             } => self.handle_room_event(room_name, username, event).await,
             ServerEvent::Error(_error) => {}
+            ServerEvent::Rooms(rooms) => {
+                let names = rooms.iter().cloned().map(|(name, _count)| name).collect();
+                self.room_list.rooms = names
+            }
+            ServerEvent::RoomCreated(room_name) => {
+                self.room_list.push_room(room_name);
+            }
+            ServerEvent::RoomDeleted(room_name) => {
+                self.room_list.remove_room(&room_name);
+            }
+            ServerEvent::Users(users) => self.room_list.users = users,
             ServerEvent::Disconnect => {
                 self.is_running = false;
             }
-            ServerEvent::RoomCreated(_) => {}
-            ServerEvent::RoomDeleted(_) => {}
-            ServerEvent::Rooms(_) => {}
-            ServerEvent::Users(_) => {}
         }
         Ok(())
     }
@@ -122,10 +136,15 @@ impl App {
             RoomEvent::Message(_message) => {}
             RoomEvent::Joined(room) | RoomEvent::Left(room) => {
                 self.message_list.room_name = room.clone();
+                self.room_list.room_name = room;
+                self.send(Command::ListUsers).await;
+                self.send(Command::ListRooms).await;
             }
             RoomEvent::NameChange(new_username) => {
                 if username == self.message_list.username {
                     self.message_list.username = new_username;
+                } else {
+                    self.send(Command::ListUsers).await;
                 }
             }
             RoomEvent::Nudge(_) => {}

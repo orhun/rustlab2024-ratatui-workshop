@@ -13,3 +13,4 @@ clap = { version = "4.5.20", features = ["derive"] }
 tokio-util = { version = "0.7.12", features = ["codec"] }
 common = { version = "1.0.0", path = "../common" }
 tui-textarea = "0.6.1"
+tui-tree-widget = "0.22.0"
