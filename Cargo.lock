@@ -1286,10 +1286,13 @@ name = "tui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
+ "common",
  "crossterm",
  "futures",
  "ratatui",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

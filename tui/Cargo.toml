@@ -9,3 +9,6 @@ crossterm = { version = "0.28.1", features = ["event-stream"] }
 anyhow = "1.0.90"
 tokio = { version = "1.40.0", features = ["full"] }
 futures = "0.3.31"
+clap = { version = "4.5.20", features = ["derive"] }
+tokio-util = { version = "0.7.12", features = ["codec"] }
+common = { version = "1.0.0", path = "../common" }
