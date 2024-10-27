@@ -1,7 +1,9 @@
+use base64::prelude::*;
 use common::{Command, RoomEvent, RoomName, ServerEvent, Username};
 use crossterm::event::{Event as CrosstermEvent, EventStream};
 use futures::{SinkExt, StreamExt};
 use ratatui::{style::Style, DefaultTerminal};
+use ratatui_explorer::File;
 use std::net::SocketAddr;
 use tokio::{
     net::{tcp::OwnedWriteHalf, TcpStream},
@@ -11,12 +13,15 @@ use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 use tui_textarea::{Input, Key, TextArea};
 
 use crate::message_list::MessageList;
-use crate::popup::HelpPopup;
+use crate::popup::Popup;
 use crate::room_list::RoomList;
 
 const KEY_BINDINGS: &str = r#"
 - [Ctrl + h] Help
 - [Enter] Send message
+- [Ctrl + e] File explorer
+    - [Enter] Select file
+    - [Right/Left] Navigate directories
 - [Esc] Quit
 "#;
 
@@ -38,12 +43,13 @@ pub struct App {
     pub message_list: MessageList,
     pub room_list: RoomList,
     pub text_area: TextArea<'static>,
-    pub popup: Option<HelpPopup>,
+    pub popup: Option<Popup>,
 }
 
 #[derive(Clone)]
 pub enum Event {
     Terminal(CrosstermEvent),
+    FileSelected(File),
     PopupClosed,
 }
 
@@ -104,10 +110,17 @@ impl App {
             Event::Terminal(raw_event) => {
                 let input = Input::from(raw_event.clone());
                 if let Some(ref mut popup) = self.popup {
-                    popup.handle_input(input).await?;
+                    popup.handle_input(input, raw_event).await?;
                     return Ok(());
                 }
                 self.handle_key_input(input).await?;
+            }
+            Event::FileSelected(file) => {
+                self.popup = None;
+                let contents = tokio::fs::read(file.path()).await?;
+                let base64 = BASE64_STANDARD.encode(contents);
+                let command = Command::SendFile(file.name().to_string(), base64);
+                self.send(command).await;
             }
             Event::PopupClosed => {
                 self.popup = None;
@@ -123,6 +136,7 @@ impl App {
             }
             (_, Key::Enter) => self.send_message().await?,
             (true, Key::Char('h')) => self.show_help(),
+            (true, Key::Char('e')) => self.show_file_explorer()?,
             (_, _) => {
                 let _ = self.text_area.input_without_shortcuts(input);
             }
@@ -144,8 +158,14 @@ impl App {
     }
 
     fn show_help(&mut self) {
-        let popup = HelpPopup::new(KEY_BINDINGS.to_string(), self.event_sender.clone());
+        let popup = Popup::help(KEY_BINDINGS.to_string(), self.event_sender.clone());
         self.popup = Some(popup);
+    }
+
+    fn show_file_explorer(&mut self) -> Result<(), anyhow::Error> {
+        let popup = Popup::file_explorer(self.event_sender.clone())?;
+        self.popup = Some(popup);
+        Ok(())
     }
 
     pub async fn handle_server_event(&mut self, event: String) -> anyhow::Result<()> {
