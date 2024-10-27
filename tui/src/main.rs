@@ -1,13 +1,22 @@
 mod app;
+mod logger;
 mod message_list;
 mod popup;
 mod room_list;
 mod ui;
 
-use app::App;
-
 use clap::Parser;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use log::LevelFilter;
+use std::{
+    fs::File,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+};
+use tracing::Level;
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter};
+
+use app::App;
 
 pub const DEFAULT_IP: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 pub const DEFAULT_PORT: u16 = 42069;
@@ -37,9 +46,25 @@ impl Args {
     }
 }
 
+fn init_tracing() -> anyhow::Result<WorkerGuard> {
+    let file = File::create("tracing.log")?;
+    let (non_blocking, guard) = tracing_appender::non_blocking(file);
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(Level::DEBUG.into())
+        .from_env_lossy();
+    tracing_subscriber::registry()
+        .with(tui_logger::tracing_subscriber_layer())
+        .with(fmt::layer().with_writer(non_blocking))
+        .with(env_filter)
+        .init();
+    tui_logger::init_logger(LevelFilter::Debug)?;
+    Ok(guard)
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let addr = Args::parse_socket_addr();
+    let _guard = init_tracing()?;
     let app = App::new(addr);
     let terminal = ratatui::init();
     let result = app.run(terminal).await;
