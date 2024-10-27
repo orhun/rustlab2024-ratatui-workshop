@@ -52,6 +52,7 @@ pub enum Event {
     Terminal(CrosstermEvent),
     FileSelected(File),
     PopupClosed,
+    EffectRendered,
 }
 
 impl From<CrosstermEvent> for Event {
@@ -126,6 +127,7 @@ impl App {
             Event::PopupClosed => {
                 self.popup = None;
             }
+            Event::EffectRendered => {}
         }
         Ok(())
     }
@@ -241,7 +243,11 @@ impl App {
                     self.send(Command::ListUsers).await;
                 }
             }
-            RoomEvent::Nudge(_) => {}
+            RoomEvent::Nudge(username) => {
+                if username == self.message_list.username {
+                    self.popup = Some(Popup::effect(self.event_sender.clone()));
+                }
+            }
             RoomEvent::File { .. } => {}
         }
     }
