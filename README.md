@@ -18,19 +18,21 @@ A terminal chat application that supports sending messages, files, and images.
 
 ### Chapters
 
-1. Initialization
-2. List
-3. Scrollbar
-4. Text input ([`tui-textarea`](https://github.com/rhysd/tui-textarea))
-5. Tree widget ([`tui-tree-widget`](https://github.com/EdJoPaTo/tui-rs-tree-widget))
-6. Popups
-7. File explorer ([`ratatui-explorer`](https://github.com/tatounee/ratatui-explorer))
-8. Rendering images ([`ratatui-image`](https://crates.io/crates/ratatui-image))
-9. Markdown preview ([`tui-markdown`](https://github.com/joshka/tui-markdown))
-10. Terminal effects ([`tachyonfx`](https://github.com/junkdog/tachyonfx))
-11. Logging ([`tui-logger`](https://github.com/gin66/tui-logger))
-12. Testing ([`insta`](https://github.com/mitsuhiko/insta))
-13. Customizations
+0. [Introduction](./workshop/00_intro.md)
+1. [Initializing the project](./workshop/01_init.md)
+2. [Initializing the TUI](./workshop/02_tui.md)
+3. [Server connection](./workshop/03_connection.md)
+4. [Message list](./workshop/04_message_list.md)
+5. [Text input](./workshop/05_text_input.md) (w/ [`tui-textarea`](https://github.com/rhysd/tui-textarea))
+6. [Room list](./workshop/06_room_list.md) (w/ [`tui-tree-widget`](https://github.com/EdJoPaTo/tui-rs-tree-widget))
+7. [Help popup](./workshop/07_help_popup.md)
+8. [File explorer](./workshop/08_file_explorer.md) (w/ [`ratatui-explorer`](https://github.com/tatounee/ratatui-explorer))
+9. [Image preview](./workshop/09_image_preview.md) (w/ [`ratatui-image`](https://crates.io/crates/ratatui-image))
+10. [Markdown preview](./workshop/10_markdown_preview.md) (w/ [`tui-markdown`](https://github.com/joshka/tui-markdown))
+11. [Terminal effects](./workshop/11_effects.md) (w/ [`tachyonfx`](https://github.com/junkdog/tachyonfx))
+12. [Logging](./workshop/12_logging.md) (w/ [`tui-logger`](https://github.com/gin66/tui-logger))
+13. [Testing](./workshop/13_testing.md) (w/ [`insta`](https://github.com/mitsuhiko/insta))
+14. [End](./workshop/14_end.md)
 
 ## Getting Started
 
@@ -52,7 +54,7 @@ git clone https://github.com/orhun/rustlab2024
 
 Your job is to implement a terminal client for a chat application using Ratatui!
 
-Begin by following the chapters in [workshop/00_intro.md](./workshop/00_intro.md)
+Start the workshop by [clicking here!](./workshop/00_intro.md) ➡️
 
 ## References
 
@@ -63,7 +65,7 @@ The client/server architecture is inspired by @pretzelhammer's [chat server](htt
 
 ## License
 
-Copyright © 2024, [Orhun Parmaksız](mailto:orhunparmaksiz@gmail.com)
+Copyright © 2024, [Orhun Parmaksız](https://github.com/orhun)
 
 Licensed under either [The MIT License](./LICENSE)
 
