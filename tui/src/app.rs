@@ -12,9 +12,9 @@ use tokio::{
 use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 use tui_textarea::{Input, Key, TextArea};
 
-use crate::message_list::MessageList;
 use crate::popup::Popup;
 use crate::room_list::RoomList;
+use crate::{logger::Logger, message_list::MessageList};
 
 const KEY_BINDINGS: &str = r#"
 - [Ctrl + h] Help
@@ -23,6 +23,7 @@ const KEY_BINDINGS: &str = r#"
     - [Enter] Select file
     - [Right/Left] Navigate directories
 - [Ctrl + p] Preview file
+- [Ctrl + l] Show logger
 - [Esc] Quit
 "#;
 
@@ -44,6 +45,7 @@ pub struct App {
     pub message_list: MessageList,
     pub room_list: RoomList,
     pub text_area: TextArea<'static>,
+    pub logger: Option<Logger>,
     pub popup: Option<Popup>,
 }
 
@@ -52,6 +54,7 @@ pub enum Event {
     Terminal(CrosstermEvent),
     FileSelected(File),
     PopupClosed,
+    LoggerClosed,
     EffectRendered,
 }
 
@@ -75,6 +78,7 @@ impl App {
             message_list: MessageList::default(),
             room_list: RoomList::default(),
             text_area: create_text_area(),
+            logger: None,
             popup: None,
         }
     }
@@ -115,6 +119,10 @@ impl App {
                     popup.handle_input(input, raw_event).await?;
                     return Ok(());
                 }
+                if let Some(logger) = &mut self.logger {
+                    logger.handle_input(input).await?;
+                    return Ok(());
+                }
                 self.handle_key_input(input).await?;
             }
             Event::FileSelected(file) => {
@@ -126,6 +134,9 @@ impl App {
             }
             Event::PopupClosed => {
                 self.popup = None;
+            }
+            Event::LoggerClosed => {
+                self.logger = None;
             }
             Event::EffectRendered => {}
         }
@@ -143,6 +154,7 @@ impl App {
             (true, Key::Char('h')) => self.show_help(),
             (true, Key::Char('e')) => self.show_file_explorer()?,
             (true, Key::Char('p')) => self.preview_file()?,
+            (true, Key::Char('l')) => self.show_logger(),
             (_, _) => {
                 let _ = self.text_area.input_without_shortcuts(input);
             }
@@ -174,6 +186,10 @@ impl App {
         Ok(())
     }
 
+    fn show_logger(&mut self) {
+        self.logger = Some(Logger::new(self.event_sender.clone()));
+    }
+
     fn preview_file(&mut self) -> Result<(), anyhow::Error> {
         let selected_event = self.message_list.selected_event();
         let event_sender = self.event_sender.clone();
@@ -194,6 +210,7 @@ impl App {
 
     pub async fn handle_server_event(&mut self, event: String) -> anyhow::Result<()> {
         let event = ServerEvent::from_json_str(&event)?;
+        tracing::info!("Handling server event: {event:?}");
         self.message_list.events.push(event.clone());
         match event {
             ServerEvent::CommandHelp(username, _help) => self.message_list.username = username,

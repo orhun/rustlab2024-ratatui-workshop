@@ -33,5 +33,7 @@ impl App {
         if let Some(popup) = &mut self.popup {
             frame.render_widget(popup, frame.area());
         }
+
+        // TODO: render the logger
     }
 }

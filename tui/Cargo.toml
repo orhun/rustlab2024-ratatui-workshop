@@ -19,4 +19,9 @@ base64 = "0.22.1"
 ratatui-image = "2.0.1"
 image = "0.25.4"
 tui-markdown = "0.2.12"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-appender = "0.2.3"
+tracing = "0.1.40"
+tui-logger = { version = "0.13.2", features = ["tracing-support"] }
+log = "0.4.22"
 tachyonfx = "0.7.0"
