@@ -22,6 +22,7 @@ const KEY_BINDINGS: &str = r#"
 - [Ctrl + e] File explorer
     - [Enter] Select file
     - [Right/Left] Navigate directories
+- [Ctrl + p] Preview file
 - [Esc] Quit
 "#;
 
@@ -135,8 +136,11 @@ impl App {
                 self.send(Command::Quit).await;
             }
             (_, Key::Enter) => self.send_message().await?,
+            (_, Key::Down) => self.message_list.state.select_previous(),
+            (_, Key::Up) => self.message_list.state.select_next(),
             (true, Key::Char('h')) => self.show_help(),
             (true, Key::Char('e')) => self.show_file_explorer()?,
+            (true, Key::Char('p')) => self.preview_file()?,
             (_, _) => {
                 let _ = self.text_area.input_without_shortcuts(input);
             }
@@ -165,6 +169,20 @@ impl App {
     fn show_file_explorer(&mut self) -> Result<(), anyhow::Error> {
         let popup = Popup::file_explorer(self.event_sender.clone())?;
         self.popup = Some(popup);
+        Ok(())
+    }
+
+    fn preview_file(&mut self) -> Result<(), anyhow::Error> {
+        let selected_event = self.message_list.selected_event();
+        let event_sender = self.event_sender.clone();
+        if let Some(ServerEvent::RoomEvent {
+            event: RoomEvent::File { contents, .. },
+            ..
+        }) = selected_event
+        {
+            let popup = Popup::image_preview(contents, event_sender)?;
+            self.popup = Some(popup);
+        }
         Ok(())
     }
 
