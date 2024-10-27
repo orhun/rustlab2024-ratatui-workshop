@@ -1,5 +1,6 @@
 mod app;
 mod message_list;
+mod popup;
 mod room_list;
 mod ui;
 

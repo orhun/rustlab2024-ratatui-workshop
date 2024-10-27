@@ -1,14 +1,24 @@
 use common::{Command, RoomEvent, RoomName, ServerEvent, Username};
-use crossterm::event::EventStream;
+use crossterm::event::{Event as CrosstermEvent, EventStream};
 use futures::{SinkExt, StreamExt};
 use ratatui::{style::Style, DefaultTerminal};
 use std::net::SocketAddr;
-use tokio::net::{tcp::OwnedWriteHalf, TcpStream};
+use tokio::{
+    net::{tcp::OwnedWriteHalf, TcpStream},
+    sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+};
 use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 use tui_textarea::{Input, Key, TextArea};
 
 use crate::message_list::MessageList;
+use crate::popup::HelpPopup;
 use crate::room_list::RoomList;
+
+const KEY_BINDINGS: &str = r#"
+- [Ctrl + h] Help
+- [Enter] Send message
+- [Esc] Quit
+"#;
 
 fn create_text_area() -> TextArea<'static> {
     let mut text_area = TextArea::default();
@@ -21,24 +31,43 @@ pub struct App {
     addr: SocketAddr,
     term_stream: EventStream,
     is_running: bool,
+    event_sender: UnboundedSender<Event>,
+    event_receiver: UnboundedReceiver<Event>,
     tcp_writer: Option<FramedWrite<OwnedWriteHalf, LinesCodec>>,
     // UI components (these need to be public as we define the draw_ui method not in a child module)
     pub message_list: MessageList,
     pub room_list: RoomList,
     pub text_area: TextArea<'static>,
+    pub popup: Option<HelpPopup>,
+}
+
+#[derive(Clone)]
+pub enum Event {
+    Terminal(CrosstermEvent),
+    PopupClosed,
+}
+
+impl From<CrosstermEvent> for Event {
+    fn from(event: CrosstermEvent) -> Self {
+        Event::Terminal(event)
+    }
 }
 
 impl App {
     pub fn new(addr: SocketAddr) -> Self {
+        let (event_sender, event_receiver) = unbounded_channel();
         let term_stream = EventStream::new();
         Self {
             addr,
             term_stream,
             is_running: false,
+            event_sender,
+            event_receiver,
             tcp_writer: None,
             message_list: MessageList::default(),
             room_list: RoomList::default(),
             text_area: create_text_area(),
+            popup: None,
         }
     }
 
@@ -55,9 +84,9 @@ impl App {
             tokio::select! {
                 Some(crossterm_event) = self.term_stream.next() => {
                     let crossterm_event = crossterm_event?;
-                    let input = Input::from(crossterm_event.clone());
-                    self.handle_key_input(input).await?;
+                    self.handle_event(Event::from(crossterm_event)).await?;
                 },
+                Some(event) = self.event_receiver.recv() => self.handle_event(event).await?,
                 Some(tcp_event) = tcp_reader.next() => self.handle_server_event(tcp_event?).await?,
             }
         }
@@ -70,13 +99,31 @@ impl App {
         }
     }
 
+    pub async fn handle_event(&mut self, event: Event) -> anyhow::Result<()> {
+        match event {
+            Event::Terminal(raw_event) => {
+                let input = Input::from(raw_event.clone());
+                if let Some(ref mut popup) = self.popup {
+                    popup.handle_input(input).await?;
+                    return Ok(());
+                }
+                self.handle_key_input(input).await?;
+            }
+            Event::PopupClosed => {
+                self.popup = None;
+            }
+        }
+        Ok(())
+    }
+
     async fn handle_key_input(&mut self, input: Input) -> anyhow::Result<()> {
-        match input.key {
-            Key::Esc => {
+        match (input.ctrl, input.key) {
+            (_, Key::Esc) => {
                 self.send(Command::Quit).await;
             }
-            Key::Enter => self.send_message().await?,
-            _ => {
+            (_, Key::Enter) => self.send_message().await?,
+            (true, Key::Char('h')) => self.show_help(),
+            (_, _) => {
                 let _ = self.text_area.input_without_shortcuts(input);
             }
         }
@@ -94,6 +141,11 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    fn show_help(&mut self) {
+        let popup = HelpPopup::new(KEY_BINDINGS.to_string(), self.event_sender.clone());
+        self.popup = Some(popup);
     }
 
     pub async fn handle_server_event(&mut self, event: String) -> anyhow::Result<()> {
