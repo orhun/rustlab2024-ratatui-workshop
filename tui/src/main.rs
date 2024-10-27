@@ -1,6 +1,7 @@
 #![allow(unused_imports, dead_code, unused_variables)]
 mod app;
 mod message_list;
+mod popup;
 mod room_list;
 mod ui;
 
