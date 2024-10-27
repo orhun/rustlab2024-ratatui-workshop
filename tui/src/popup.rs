@@ -10,6 +10,10 @@ use ratatui::{
 };
 use ratatui_explorer::{FileExplorer, Theme};
 use ratatui_image::{picker::Picker, protocol::StatefulProtocol, StatefulImage};
+use tachyonfx::{
+    fx::{self, Direction as FxDirection},
+    Duration, Effect, EffectRenderer, EffectTimer, Interpolation, Shader,
+};
 use tokio::sync::mpsc::UnboundedSender;
 use tui_textarea::{Input, Key};
 
@@ -20,6 +24,7 @@ pub enum Popup {
     FileExplorer(FileExplorer, UnboundedSender<Event>),
     ImagePreview(Box<dyn StatefulProtocol>, UnboundedSender<Event>),
     MarkdownPreview(String, UnboundedSender<Event>),
+    Effect(Effect, UnboundedSender<Event>),
 }
 
 impl Popup {
@@ -62,6 +67,10 @@ impl Popup {
             String::from_utf8(contents)?,
             event_sender,
         ))
+    }
+
+    pub fn effect(event_sender: UnboundedSender<Event>) -> Self {
+        todo!("return Effect variant")
     }
 
     pub async fn handle_input(
@@ -109,6 +118,9 @@ impl Widget for &mut Popup {
             Popup::MarkdownPreview(contents, _) => {
                 render_markdown_preview(area, buf, contents);
             }
+            Popup::Effect(effect, event_sender) => {
+                // TODO: call render_effect and handle EffectRendered
+            }
         }
     }
 }
@@ -147,6 +159,10 @@ fn render_markdown_preview(area: Rect, buf: &mut Buffer, contents: &str) {
     Clear.render(popup_area, buf);
     Block::bordered().render(popup_area, buf);
     text.render(popup_area.offset(Offset { x: 1, y: 1 }), buf);
+}
+
+fn render_effect(area: Rect, buf: &mut Buffer, effect: &mut Effect) {
+    // TODO: render the effect
 }
 
 fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
