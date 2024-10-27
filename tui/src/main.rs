@@ -1,5 +1,6 @@
 mod app;
 mod message_list;
+mod ui;
 
 use app::App;
 
