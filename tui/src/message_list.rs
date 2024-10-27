@@ -88,6 +88,9 @@ impl MessageList {
                 " is now known as ".into(),
                 Span::from(name).green().italic(),
             ])),
+            RoomEvent::File { filename, .. } => {
+                todo!("user sent file line")
+            }
             _ => None,
         }
     }
