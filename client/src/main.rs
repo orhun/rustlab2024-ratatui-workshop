@@ -1,13 +1,17 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::{
+    io::BufRead,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+};
 
 use clap::Parser;
 use clap_verbosity_flag::{InfoLevel, Verbosity};
-use color_eyre::eyre::{Context, OptionExt};
+use color_eyre::eyre::bail;
 use colored_json::CompactFormatter;
 use serde_json::Value;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::TcpStream,
+    sync::mpsc::Sender,
 };
 use tracing::level_filters::LevelFilter;
 use tracing_log::AsTrace;
@@ -27,31 +31,71 @@ async fn main() -> color_eyre::Result<()> {
     let (reader, mut writer) = stream.split();
     let mut server_lines = BufReader::new(reader).lines();
 
-    let stdin = tokio::io::stdin();
-    let mut stdin_lines = BufReader::new(stdin).lines();
+    let (stdin_sender, mut stdin_lines) = tokio::sync::mpsc::channel(1024);
+    std::thread::spawn(move || read_stdin(stdin_sender));
 
     let json_formatter = colored_json::ColoredFormatter::new(CompactFormatter);
 
     loop {
         tokio::select! {
-            line = stdin_lines.next_line() => {
-                let line = line.wrap_err("failed to read line from stdin")?;
-                let line = line.ok_or_eyre("empty line from stdin")?;
-                writer.write_all(line.as_bytes()).await?;
-                writer.write_all(b"\n").await?;
+            line = stdin_lines.recv() => {
+                match line {
+                    Some(line) => {
+                        writer.write_all(line.as_bytes()).await?;
+                        writer.write_all(b"\n").await?;
+                    },
+                    None => {
+                        tracing::info!("Stdin closed");
+                        return Ok(());
+                    },
+                }
             },
             line = server_lines.next_line() => {
-                let line = line.wrap_err("failed to read line from server")?;
-                let line = line.ok_or_eyre("empty line from server")?;
-                // add some color to the JSON output
-                let line: Value = serde_json::from_str(&line)?;
-                let line = json_formatter.clone().to_colored_json_auto(&line)?;
-                println!("{line}");
+                match line {
+                    Ok(line) => match line {
+                        Some(line) => {
+                            let line: Value = serde_json::from_str(&line)?;
+                            let line = json_formatter.clone().to_colored_json_auto(&line)?;
+                            println!("{line}");
+                        }
+                        None => {
+                            tracing::info!("Server closed connection");
+                            return Ok(());
+                        }
+                    },
+                    Err(err) => {
+                        tracing::error!("Failed to read line from server: {err}");
+                        bail!("failed to read line from server: {err}");
+                    }
+                }
             },
-            else => break,
+            else => bail!("all streams closed"),
         }
     }
-    Ok(())
+}
+
+/// A thread that reads lines from stdin and sends them to the main part of the program
+///
+/// This uses standard threads and blocking I/O to read from stdin as the tokio stdin is actually
+/// implemented using normal blocking I/O and recommends this approach.
+fn read_stdin(sender: Sender<String>) {
+    let stdin = std::io::stdin();
+    let mut lines = std::io::BufReader::new(stdin).lines();
+    loop {
+        match lines.next() {
+            Some(Ok(line)) => {
+                if sender.blocking_send(line).is_err() {
+                    tracing::error!("failed to send line to server as it has disconnected");
+                    break;
+                }
+            }
+            Some(Err(err)) => {
+                tracing::error!("failed to read line from stdin: {err}");
+                break;
+            }
+            None => break,
+        };
+    }
 }
 
 #[derive(Debug, clap::Parser)]
