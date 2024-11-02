@@ -1,18 +1,20 @@
 use std::{
-    io::BufRead,
+    io::{self, BufRead},
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    thread,
 };
 
 use clap::Parser;
 use clap_verbosity_flag::{InfoLevel, Verbosity};
-use color_eyre::eyre::bail;
-use colored_json::CompactFormatter;
-use serde_json::Value;
+use color_eyre::eyre::{bail, WrapErr};
+use colored_json::{ColoredFormatter, CompactFormatter};
+use common::ServerEvent;
+use futures::{SinkExt, StreamExt};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::TcpStream,
-    sync::mpsc::Sender,
+    sync::mpsc::{self, UnboundedSender},
 };
+use tokio_util::codec::{Framed, LinesCodec};
 use tracing::level_filters::LevelFilter;
 use tracing_log::AsTrace;
 use tracing_subscriber::EnvFilter;
@@ -25,49 +27,35 @@ async fn main() -> color_eyre::Result<()> {
     let level = args.verbosity.log_level_filter().as_trace();
     init_tracing(level);
 
-    let mut stream = TcpStream::connect(args.address()).await?;
+    let stream = TcpStream::connect(args.address()).await?;
     tracing::info!("Connected to server: {}", stream.local_addr()?);
+    let mut server = Framed::new(stream, LinesCodec::new());
 
-    let (reader, mut writer) = stream.split();
-    let mut server_lines = BufReader::new(reader).lines();
+    let (stdin_sender, mut stdin_receiver) = mpsc::unbounded_channel();
+    thread::spawn(move || read_stdin(stdin_sender));
 
-    let (stdin_sender, mut stdin_lines) = tokio::sync::mpsc::channel(1024);
-    std::thread::spawn(move || read_stdin(stdin_sender));
-
-    let json_formatter = colored_json::ColoredFormatter::new(CompactFormatter);
+    let json_formatter = ColoredFormatter::new(CompactFormatter);
 
     loop {
         tokio::select! {
-            line = stdin_lines.recv() => {
-                match line {
-                    Some(line) => {
-                        writer.write_all(line.as_bytes()).await?;
-                        writer.write_all(b"\n").await?;
-                    },
-                    None => {
-                        tracing::info!("Stdin closed");
-                        return Ok(());
-                    },
-                }
+            line = stdin_receiver.recv() => {
+                let Some(line) = line else {
+                    tracing::info!("Stdin closed");
+                    return Ok(());
+                };
+                server.send(line).await?;
+                server.send("\n".to_string()).await?;
             },
-            line = server_lines.next_line() => {
-                match line {
-                    Ok(line) => match line {
-                        Some(line) => {
-                            let line: Value = serde_json::from_str(&line)?;
-                            let line = json_formatter.clone().to_colored_json_auto(&line)?;
-                            println!("{line}");
-                        }
-                        None => {
-                            tracing::info!("Server closed connection");
-                            return Ok(());
-                        }
-                    },
-                    Err(err) => {
-                        tracing::error!("Failed to read line from server: {err}");
-                        bail!("failed to read line from server: {err}");
-                    }
-                }
+            line = server.next() => {
+                let Some(line) = line else {
+                    tracing::info!("Server closed connection");
+                    return Ok(());
+                };
+                let line = line.wrap_err("failed to read line from server")?;
+                let event = ServerEvent::from_json_str(&line).wrap_err("failed to parse event")?;
+                // a real client might do something more interesting with the event here, but for
+                // now we just print the event as colored JSON
+                println!("{}", json_formatter.clone().to_colored_json_auto(&event)?);
             },
             else => bail!("all streams closed"),
         }
@@ -78,23 +66,21 @@ async fn main() -> color_eyre::Result<()> {
 ///
 /// This uses standard threads and blocking I/O to read from stdin as the tokio stdin is actually
 /// implemented using normal blocking I/O and recommends this approach.
-fn read_stdin(sender: Sender<String>) {
-    let stdin = std::io::stdin();
-    let mut lines = std::io::BufReader::new(stdin).lines();
-    loop {
-        match lines.next() {
-            Some(Ok(line)) => {
-                if sender.blocking_send(line).is_err() {
-                    tracing::error!("failed to send line to server as it has disconnected");
+fn read_stdin(sender: UnboundedSender<String>) {
+    let mut lines = io::BufReader::new(io::stdin()).lines();
+    while let Some(line) = lines.next() {
+        match line {
+            Ok(line) => {
+                if sender.send(line).is_err() {
+                    tracing::warn!("server closed connection. message not sent");
                     break;
                 }
             }
-            Some(Err(err)) => {
+            Err(err) => {
                 tracing::error!("failed to read line from stdin: {err}");
                 break;
             }
-            None => break,
-        };
+        }
     }
 }
 
