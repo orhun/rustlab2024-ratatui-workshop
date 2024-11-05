@@ -24,7 +24,16 @@ impl Popup {
     }
 
     pub fn file_explorer(event_sender: UnboundedSender<Event>) -> io::Result<Self> {
-        todo!("return a FileExplorer variant")
+        let theme = Theme::default()
+            .add_default_title()
+            .with_title_bottom(|fe| format!("[ {} files ]", fe.files().len()).into())
+            .with_style(Color::Yellow)
+            .with_highlight_item_style(Modifier::BOLD)
+            .with_highlight_dir_style(Style::new().blue().bold())
+            .with_highlight_symbol("> ")
+            .with_block(Block::bordered().border_type(BorderType::Rounded));
+        let file_explorer = FileExplorer::with_theme(theme)?;
+        Ok(Self::FileExplorer(file_explorer, event_sender))
     }
 
     pub async fn handle_input(
@@ -41,7 +50,13 @@ impl Popup {
                     let _ = event_sender.send(Event::PopupClosed);
                 }
                 Key::Enter => {
-                    // TODO: handle Event::FileSelected
+                    let file = explorer.current().clone();
+                    if file.is_dir() {
+                        return Ok(());
+                    }
+                    let event = Event::FileSelected(file);
+                    let _ = event_sender.send(event);
+                    let _ = event_sender.send(Event::PopupClosed);
                 }
                 _ => explorer.handle(&raw_event)?,
             },
@@ -74,7 +89,9 @@ fn render_help(key_bindings: &str, area: Rect, buf: &mut Buffer) {
 }
 
 fn render_explorer(area: Rect, buf: &mut Buffer, explorer: &mut FileExplorer) {
-    // TODO: render the file explorer
+    let popup_area = popup_area(area, 50, 50);
+    Clear.render(popup_area, buf);
+    explorer.widget().render(popup_area, buf);
 }
 
 fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {

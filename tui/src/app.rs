@@ -116,7 +116,11 @@ impl App {
                 self.handle_key_input(input).await?;
             }
             Event::FileSelected(file) => {
-                // TODO: send Command::SendFile to the server
+                self.popup = None;
+                let contents = tokio::fs::read(file.path()).await?;
+                let base64 = BASE64_STANDARD.encode(contents);
+                let command = Command::SendFile(file.name().to_string(), base64);
+                self.send(command).await;
             }
             Event::PopupClosed => {
                 self.popup = None;
