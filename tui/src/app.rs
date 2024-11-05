@@ -180,7 +180,12 @@ impl App {
             ..
         }) = selected_event
         {
-            // TODO: show appropriate popup
+            let popup = if filename.ends_with("jpg") {
+                Popup::image_preview(contents, event_sender)
+            } else {
+                Popup::markdown_preview(contents, event_sender)
+            }?;
+            self.popup = Some(popup);
         }
         Ok(())
     }
