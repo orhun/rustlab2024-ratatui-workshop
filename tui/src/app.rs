@@ -244,7 +244,9 @@ impl App {
                 }
             }
             RoomEvent::Nudge(username) => {
-                todo!("handle nudge event")
+                if username == self.message_list.username {
+                    self.popup = Some(Popup::effect(self.event_sender.clone()));
+                }
             }
             RoomEvent::File { .. } => {}
         }

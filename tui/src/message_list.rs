@@ -102,7 +102,13 @@ impl MessageList {
                 " sent a file: ".into(),
                 Span::from(filename).red().magenta(),
             ])),
-            RoomEvent::Nudge(name) => todo!("user nudged line"),
+            RoomEvent::Nudge(name) => Some(Line::from(vec![
+                date.italic(),
+                " | ".into(),
+                Span::from(username).cyan(),
+                " nudged ".into(),
+                Span::from(name).green().italic(),
+            ])),
         }
     }
 }

@@ -70,7 +70,28 @@ impl Popup {
     }
 
     pub fn effect(event_sender: UnboundedSender<Event>) -> Self {
-        todo!("return Effect variant")
+        let effect = fx::sequence(&[
+            fx::ping_pong(fx::sweep_in(
+                FxDirection::DownToUp,
+                10,
+                0,
+                Color::DarkGray,
+                EffectTimer::from_ms(3000, Interpolation::QuadIn),
+            )),
+            fx::hsl_shift_fg([360.0, 0.0, 0.0], 750),
+            fx::hsl_shift_fg([0.0, -100.0, 0.0], 750),
+            fx::hsl_shift_fg([0.0, -100.0, 0.0], 750).reversed(),
+            fx::hsl_shift_fg([0.0, 100.0, 0.0], 750),
+            fx::hsl_shift_fg([0.0, 100.0, 0.0], 750).reversed(),
+            fx::hsl_shift_fg([0.0, 0.0, -100.0], 750),
+            fx::hsl_shift_fg([0.0, 0.0, -100.0], 750).reversed(),
+            fx::hsl_shift_fg([0.0, 0.0, 100.0], 750),
+            fx::hsl_shift_fg([0.0, 0.0, 100.0], 750).reversed(),
+            fx::dissolve((800, Interpolation::SineOut)),
+            fx::coalesce((800, Interpolation::SineOut)),
+        ]);
+
+        Popup::Effect(effect, event_sender)
     }
 
     pub async fn handle_input(
@@ -119,7 +140,12 @@ impl Widget for &mut Popup {
                 render_markdown_preview(area, buf, contents);
             }
             Popup::Effect(effect, event_sender) => {
-                // TODO: call render_effect and handle EffectRendered
+                if effect.running() {
+                    render_effect(area, buf, effect);
+                    let _ = event_sender.send(Event::EffectRendered);
+                } else {
+                    let _ = event_sender.send(Event::PopupClosed);
+                }
             }
         }
     }
@@ -162,7 +188,8 @@ fn render_markdown_preview(area: Rect, buf: &mut Buffer, contents: &str) {
 }
 
 fn render_effect(area: Rect, buf: &mut Buffer, effect: &mut Effect) {
-    // TODO: render the effect
+    let popup_area = popup_area(area, 100, 100);
+    buf.render_effect(effect, popup_area, Duration::from_millis(10));
 }
 
 fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
