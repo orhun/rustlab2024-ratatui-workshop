@@ -26,6 +26,31 @@ impl RoomList {
 
 impl Widget for &mut RoomList {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // TODO: render a Tree widget: <https://docs.rs/tui-tree-widget>
+        let leaves: Vec<TreeItem<String>> = self
+            .rooms
+            .iter()
+            .flat_map(|room| {
+                if *room == self.room_name {
+                    TreeItem::new(
+                        room.as_str().to_string(),
+                        room.as_str().to_string(),
+                        self.users
+                            .iter()
+                            .map(|user| {
+                                TreeItem::new_leaf(user.as_str().to_string(), user.as_str())
+                            })
+                            .collect(),
+                    )
+                } else {
+                    TreeItem::new(room.as_str().to_string(), room.as_str(), vec![])
+                }
+            })
+            .collect();
+
+        if let Ok(tree) = Tree::new(&leaves) {
+            let tree = tree.block(Block::bordered().title("[ Rooms ]"));
+            self.state.open(vec![self.room_name.as_str().to_string()]);
+            StatefulWidget::render(tree, area, buf, &mut self.state);
+        }
     }
 }
