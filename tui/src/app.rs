@@ -173,7 +173,16 @@ impl App {
     }
 
     fn preview_file(&mut self) -> Result<(), anyhow::Error> {
-        // TODO: show ImagePreview popup
+        let selected_event = self.message_list.selected_event();
+        let event_sender = self.event_sender.clone();
+        if let Some(ServerEvent::RoomEvent {
+            event: RoomEvent::File { contents, .. },
+            ..
+        }) = selected_event
+        {
+            let popup = Popup::image_preview(contents, event_sender)?;
+            self.popup = Some(popup);
+        }
         Ok(())
     }
 

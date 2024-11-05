@@ -43,7 +43,13 @@ impl Popup {
         contents: String,
         event_sender: UnboundedSender<Event>,
     ) -> anyhow::Result<Popup> {
-        todo!("return ImagePreview variant")
+        let data = BASE64_STANDARD.decode(contents.as_bytes())?;
+        let img = image::load_from_memory(&data)?;
+        let user_fontsize = (7, 14);
+        let mut picker = Picker::new(user_fontsize);
+        picker.guess_protocol();
+        let image = picker.new_resize_protocol(img);
+        Ok(Popup::ImagePreview(image, event_sender))
     }
 
     pub async fn handle_input(
@@ -109,7 +115,9 @@ fn render_explorer(area: Rect, buf: &mut Buffer, explorer: &mut FileExplorer) {
 }
 
 fn render_image_preview(area: Rect, buf: &mut Buffer, protocol: &mut Box<dyn StatefulProtocol>) {
-    // TODO: render image preview
+    let popup_area = popup_area(area, 80, 80);
+    let image = StatefulImage::new(None);
+    image.render(popup_area, buf, protocol);
 }
 
 fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {

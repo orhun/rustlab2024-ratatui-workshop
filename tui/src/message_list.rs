@@ -32,7 +32,7 @@ impl Widget for &mut MessageList {
             .repeat_highlight_symbol(true)
             .direction(ListDirection::BottomToTop);
 
-        todo!("render message list with a state")
+        StatefulWidget::render(list, area, buf, &mut self.state);
     }
 }
 
