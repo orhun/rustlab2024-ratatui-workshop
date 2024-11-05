@@ -23,14 +23,25 @@ impl HelpPopup {
     }
 
     pub async fn handle_input(&mut self, input: Input) -> anyhow::Result<()> {
-        // TODO: handle the popup input
+        if input.key == Key::Esc {
+            let _ = self.event_sender.send(Event::PopupClosed);
+        }
         Ok(())
     }
 }
 
 impl Widget for &mut HelpPopup {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        // TODO: render a popup with the key bindings
+        let popup_area = popup_area(area, 30, 30);
+        Clear.render(popup_area, buf);
+        Paragraph::new(self.key_bindings.trim())
+            .wrap(Wrap { trim: false })
+            .block(
+                Block::bordered()
+                    .title("Help")
+                    .title_style(Style::new().bold()),
+            )
+            .render(popup_area, buf);
     }
 }
 

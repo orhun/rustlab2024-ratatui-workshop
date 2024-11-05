@@ -14,8 +14,11 @@ use crate::message_list::MessageList;
 use crate::popup::HelpPopup;
 use crate::room_list::RoomList;
 
-// TODO: define the key bindings
-const KEY_BINDINGS: &str = "todo";
+const KEY_BINDINGS: &str = r#"
+- [Ctrl + h] Help
+- [Enter] Send message
+- [Esc] Quit
+"#;
 
 fn create_text_area() -> TextArea<'static> {
     let mut text_area = TextArea::default();
@@ -114,7 +117,16 @@ impl App {
     }
 
     async fn handle_key_input(&mut self, input: Input) -> anyhow::Result<()> {
-        // TODO: handle key inputs
+        match (input.ctrl, input.key) {
+            (_, Key::Esc) => {
+                self.send(Command::Quit).await;
+            }
+            (_, Key::Enter) => self.send_message().await?,
+            (true, Key::Char('h')) => self.show_help(),
+            (_, _) => {
+                let _ = self.text_area.input_without_shortcuts(input);
+            }
+        }
         Ok(())
     }
 
