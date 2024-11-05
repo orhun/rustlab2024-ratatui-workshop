@@ -22,7 +22,7 @@ impl Logger {
     }
 
     pub async fn handle_input(&mut self, input: Input) -> anyhow::Result<()> {
-        // TODO: print log about pressed key
+        tracing::debug!("Logger input: {:?}", input);
         match (input.ctrl, input.key) {
             (true, Key::Char('l')) => {
                 let _ = self.event_sender.send(Event::LoggerClosed);
@@ -50,6 +50,20 @@ impl Widget for &Logger {
     where
         Self: Sized,
     {
-        // TODO: render TuiLoggerSmartWidget: <https://docs.rs/tui-logger/latest/tui_logger/struct.TuiLoggerSmartWidget.html>
+        TuiLoggerSmartWidget::default()
+            .style_error(Style::default().fg(Color::Red))
+            .style_debug(Style::default().fg(Color::Green))
+            .style_warn(Style::default().fg(Color::Yellow))
+            .style_trace(Style::default().fg(Color::Magenta))
+            .style_info(Style::default().fg(Color::Cyan))
+            .highlight_style(Style::default().fg(Color::Blue))
+            .output_separator(':')
+            .output_timestamp(Some("%H:%M:%S".to_string()))
+            .output_level(Some(TuiLoggerLevelOutput::Abbreviated))
+            .output_target(true)
+            .output_file(true)
+            .output_line(true)
+            .state(&self.state)
+            .render(area, buf);
     }
 }

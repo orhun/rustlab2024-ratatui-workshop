@@ -48,7 +48,18 @@ impl Args {
 }
 
 fn init_tracing() -> anyhow::Result<WorkerGuard> {
-    todo!("initialize tracing")
+    let file = File::create("tracing.log")?;
+    let (non_blocking, guard) = tracing_appender::non_blocking(file);
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(Level::DEBUG.into())
+        .from_env_lossy();
+    tracing_subscriber::registry()
+        .with(tui_logger::tracing_subscriber_layer())
+        .with(fmt::layer().with_writer(non_blocking))
+        .with(env_filter)
+        .init();
+    tui_logger::init_logger(LevelFilter::Debug)?;
+    Ok(guard)
 }
 
 #[tokio::main]
