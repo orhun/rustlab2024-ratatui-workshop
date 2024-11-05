@@ -10,7 +10,10 @@ use tui_textarea::{Input, Key, TextArea};
 use crate::message_list::MessageList;
 
 fn create_text_area() -> TextArea<'static> {
-    todo!("return a TextArea")
+    let mut text_area = TextArea::default();
+    text_area.set_cursor_line_style(Style::default());
+    text_area.set_placeholder_text("Start typing...");
+    text_area
 }
 
 pub struct App {
@@ -59,12 +62,30 @@ impl App {
     }
 
     async fn handle_key_input(&mut self, input: Input) -> anyhow::Result<()> {
-        // TODO: handle key input
+        match input.key {
+            Key::Esc => {
+                if let Some(writer) = self.tcp_writer.as_mut() {
+                    let _ = writer.send(Command::Quit.to_string()).await;
+                }
+            }
+            Key::Enter => self.send_message().await?,
+            _ => {
+                let _ = self.text_area.input_without_shortcuts(input);
+            }
+        }
         Ok(())
     }
 
     async fn send_message(&mut self) -> anyhow::Result<()> {
-        // TODO: send the message in the text area to the server
+        if let Some(writer) = self.tcp_writer.as_mut() {
+            if !self.text_area.is_empty() {
+                for line in self.text_area.clone().into_lines() {
+                    writer.send(line).await?;
+                }
+                self.text_area.select_all();
+                self.text_area.delete_line_by_end();
+            }
+        }
         Ok(())
     }
 
