@@ -5,7 +5,10 @@ use common::{Command, RoomEvent, RoomName, ServerEvent, Username};
 use futures::SinkExt;
 use tokio::{net::TcpStream, sync::broadcast::Receiver};
 use tokio_stream::StreamExt;
-use tokio_util::codec::{Framed, LinesCodec};
+use tokio_util::{
+    codec::{Framed, LinesCodec},
+    sync::CancellationToken,
+};
 use tracing::instrument;
 
 use crate::{room::Room, rooms::Rooms, server::COMMANDS, users::Users};
@@ -25,16 +28,10 @@ pub struct Connection {
     username: Username,
     /// The address of the connected user
     addr: SocketAddr,
-    /// The current state of the connection
-    state: ConnectionState,
     /// The room that the user is currently in
     room: Room,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ConnectionState {
-    Connected,
-    Disconnected,
+    /// A cancellation token that is triggered when the connection should be closed
+    cancel_token: CancellationToken,
 }
 
 impl Connection {
@@ -57,7 +54,7 @@ impl Connection {
             rooms,
             username,
             addr,
-            state: ConnectionState::Connected,
+            cancel_token: CancellationToken::new(),
             room,
         }
     }
@@ -66,7 +63,7 @@ impl Connection {
         tracing::debug!(?event, "Sending event");
         if let Err(err) = self.user_events.send(event.as_json_str()).await {
             tracing::error!("Failed to send event: {err}");
-            self.state = ConnectionState::Disconnected;
+            self.cancel_token.cancel();
         }
     }
 
@@ -91,8 +88,12 @@ impl Connection {
     }
 
     async fn run(&mut self) -> anyhow::Result<()> {
-        while self.state == ConnectionState::Connected {
+        loop {
             tokio::select! {
+                _ = self.cancel_token.cancelled() => {
+                    tracing::info!("Connection closed");
+                    break;
+                },
                 Some(message) = self.user_events.next() => {
                     let message = message.context("failed to read from stream")?;
                     self.handle_message(message).await;
@@ -188,7 +189,7 @@ impl Connection {
             Command::Quit => {
                 self.room.leave(&self.username);
                 self.send_event(ServerEvent::Disconnect).await;
-                self.state = ConnectionState::Disconnected;
+                self.cancel_token.cancel();
             }
         }
     }
