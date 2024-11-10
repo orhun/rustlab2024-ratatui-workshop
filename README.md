@@ -73,7 +73,7 @@ There are minimal slides included in the `presentation.md` file. You can use [`p
 presenterm -c config.yml presentation.md
 ```
 
-Don't forget to _tweet_ at us!
+Don't forget to [_tweet_](https://x.com/orhundev) at us!
 
 ## References
 
